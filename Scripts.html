@@ -1,0 +1,2350 @@
+
+<script id="up-oracular-form-feedback">
+(function () {
+  'use strict';
+  if (window.UpOracularFeedback) return;
+
+  var timer = null;
+  function notify(kind, message) {
+    var box = document.getElementById('uo-feedback-box');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'uo-feedback-box';
+      box.className = 'uo-feedback-box';
+      box.setAttribute('role', 'status');
+      box.setAttribute('aria-live', 'polite');
+      document.body.appendChild(box);
+    }
+    box.dataset.kind = kind === 'err' ? 'err' : 'ok';
+    box.textContent = String(message || (kind === 'err' ? 'Nao foi possivel concluir.' : 'Operacao concluida.'));
+    box.classList.add('is-visible');
+    clearTimeout(timer);
+    timer = setTimeout(function () {
+      box.classList.remove('is-visible');
+    }, 1000);
+  }
+
+  function connectLabels(form) {
+    form.querySelectorAll('input:not([type="hidden"]), select, textarea').forEach(function (field, index) {
+      var id = field.id || ('uo-field-' + index + '-' + Math.random().toString(36).slice(2, 7));
+      field.id = id;
+      var label = form.querySelector('label[for="' + id + '"]');
+      if (!label) {
+        var sibling = field.previousElementSibling;
+        if (sibling && sibling.tagName === 'LABEL') {
+          sibling.htmlFor = id;
+          label = sibling;
+        }
+      }
+      if (label && field.parentElement && !field.parentElement.classList.contains('uo-field')) {
+        field.parentElement.classList.add('uo-field');
+      }
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('form').forEach(connectLabels);
+  });
+
+  document.addEventListener('submit', function (event) {
+    var form = event.target;
+    if (!form || form.tagName !== 'FORM') return;
+    form.setAttribute('aria-busy', 'true');
+    notify('ok', 'Enviando...');
+    window.setTimeout(function () {
+      if (form.getAttribute('aria-busy') === 'true') {
+        form.removeAttribute('aria-busy');
+      }
+    }, 10000);
+  }, true);
+
+  window.UpOracularFeedback = {
+    ok: function (message) { notify('ok', message); },
+    err: function (message) { notify('err', message); },
+    done: function (form, message) {
+      if (form) form.removeAttribute('aria-busy');
+      notify('ok', message);
+    },
+    fail: function (form, message) {
+      if (form) form.removeAttribute('aria-busy');
+      notify('err', message);
+    }
+  };
+}());
+</script>
+
+
+<script>
+  (function () {
+    'use strict';
+
+    var state = {
+      alunos: [],
+      escolas: [],
+      professores: [],
+      references: {
+        escolas: []
+      },
+      analysis: null,
+      analysisLoading: false,
+      recent: [],
+      stats: {},
+      maturity: null,
+      maturityLoading: false,
+      frontendMaturity: null,
+      frontendMaturityLoading: false,
+      busy: 0,
+      searchTimer: null,
+      escolaSearchTimer: null,
+      professorSearchTimer: null
+    };
+
+    var elements = {};
+    var AUTH_STORAGE_KEY = 'nca-sem.auth-token';
+
+    // FORÇA BRUTA: Garante execução imediata ou no DOMContentLoaded
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initialize);
+    } else {
+      // DOM já carregado, executa imediatamente
+      setTimeout(initialize, 0);
+    }
+
+    function initialize() {
+      // Initialize called
+      cacheElements();
+      bindEvents();
+      initializeAuthentication();
+    }
+
+    function getAuthToken() {
+      try {
+        return localStorage.getItem(AUTH_STORAGE_KEY) || '';
+      } catch (error) {
+        return '';
+      }
+    }
+
+    function setAuthToken(token) {
+      try {
+        if (token) localStorage.setItem(AUTH_STORAGE_KEY, token);
+        else localStorage.removeItem(AUTH_STORAGE_KEY);
+      } catch (error) {}
+    }
+
+    function showAuthGate(message) {
+      var authGate = document.getElementById('auth-gate');
+      var authenticatedApp = document.getElementById('authenticated-app');
+      
+      // showAuthGate called with message
+      
+      // FORÇA BRUTA: Esconde o app autenticado
+      if (authenticatedApp) {
+        authenticatedApp.hidden = true;
+        authenticatedApp.setAttribute('hidden', '');
+        authenticatedApp.setAttribute('data-hidden', 'true');
+        authenticatedApp.style.display = 'none';
+        authenticatedApp.style.visibility = 'hidden';
+        authenticatedApp.style.opacity = '0';
+        authenticatedApp.classList.add('hidden');
+      }
+      
+      // FORÇA BRUTA: Mostra o auth gate
+      if (authGate) {
+        authGate.hidden = false;
+        authGate.removeAttribute('hidden');
+        authGate.removeAttribute('data-hidden');
+        authGate.style.display = 'grid';
+        authGate.style.visibility = 'visible';
+        authGate.style.opacity = '1';
+        authGate.classList.remove('hidden');
+      }
+      
+      var authError = document.getElementById('auth-error');
+      if (authError) {
+        authError.textContent = message || '';
+      }
+      
+      setTimeout(function () {
+        var usernameField = document.getElementById('auth-username');
+        if (usernameField) {
+          usernameField.focus();
+        }
+      }, 100);
+    }
+
+    function startAuthenticatedApp(session) {
+      var authGate = document.getElementById('auth-gate');
+      var authenticatedApp = document.getElementById('authenticated-app');
+      
+      // startAuthenticatedApp called with session
+      
+      // FORÇA BRUTA: Esconde o auth gate
+      if (authGate) {
+        authGate.hidden = true;
+        authGate.setAttribute('hidden', '');
+        authGate.setAttribute('data-hidden', 'true');
+        authGate.style.display = 'none';
+        authGate.style.visibility = 'hidden';
+        authGate.style.opacity = '0';
+        authGate.classList.add('hidden');
+      }
+      
+      // FORÇA BRUTA: Mostra o app autenticado
+      if (authenticatedApp) {
+        authenticatedApp.hidden = false;
+        authenticatedApp.removeAttribute('hidden');
+        authenticatedApp.removeAttribute('data-hidden');
+        authenticatedApp.style.display = 'grid';
+        authenticatedApp.style.visibility = 'visible';
+        authenticatedApp.style.opacity = '1';
+        authenticatedApp.classList.remove('hidden');
+      }
+      
+      state.authSession = session;
+
+      // FORÇA MÁXIMA: Remove o auth-gate do DOM após 5 s para garantir que o app
+      // permaneça visível mesmo que bootstrap retorne UNAUTHORIZED por falha
+      // transitória de ScriptProperties ou planilha. Só dispara após login
+      // confirmado (startAuthenticatedApp só é chamada com sessão válida).
+      setTimeout(function() {
+        var gate = document.getElementById('auth-gate');
+        if (gate && gate.parentNode) {
+          gate.parentNode.removeChild(gate);
+        }
+        var app = document.getElementById('authenticated-app');
+        if (app) {
+          app.style.cssText = 'display:grid !important; visibility:visible !important; opacity:1 !important;';
+          app.removeAttribute('hidden');
+          app.removeAttribute('data-hidden');
+          app.classList.remove('hidden');
+        }
+      }, 5000);
+
+      // Aguarda um pouco antes de carregar o bootstrap
+      setTimeout(function() {
+        loadBootstrap();
+      }, 200);
+    }
+
+    function initializeAuthentication() {
+      // initializeAuthentication started
+      
+      var form = document.getElementById('auth-form');
+      if (!form) {
+        console.error('auth-form not found');
+        return;
+      }
+      
+      form.addEventListener('submit', function (event) {
+        event.preventDefault();
+        var button = document.getElementById('auth-submit');
+        var username = document.getElementById('auth-username').value.trim();
+        var password = document.getElementById('auth-password').value;
+        document.getElementById('auth-error').textContent = '';
+        button.disabled = true;
+        button.textContent = 'Entrando...';
+
+        google.script.run
+          .withSuccessHandler(function (result) {
+            // Login result received
+            button.disabled = false;
+            button.textContent = 'Entrar';
+            if (!result || !result.success) {
+              showAuthGate(result && result.message ? result.message : 'Credenciais invalidas.');
+              return;
+            }
+            setAuthToken(result.session.token);
+            form.reset();
+            
+            // FORÇA BRUTA: Timeout adicional para garantir
+            setTimeout(function() {
+              startAuthenticatedApp(result.session);
+            }, 100);
+          })
+          .withFailureHandler(function (error) {
+            console.error('Login error:', error);
+            button.disabled = false;
+            button.textContent = 'Entrar';
+            showAuthGate(error && error.message ? error.message : 'Falha ao autenticar.');
+          })
+          .Auth_login(username, password);
+      });
+
+      // FORÇA BRUTA: Verifica token imediatamente
+      var token = getAuthToken();
+      // [LGPD] Evento registrado; detalhes sensíveis omitidos
+      
+      if (!token) {
+        // No token, showing auth gate
+        showAuthGate('');
+        return;
+      }
+      
+      // Token exists, verifying session
+      google.script.run
+        .withSuccessHandler(function (session) {
+          // Session verification result received
+          if (session && session.valid) {
+            // Session valid, starting authenticated app
+            startAuthenticatedApp(session);
+          } else {
+            // Session invalid, showing auth gate
+            setAuthToken('');
+            showAuthGate('Sua sessao expirou. Entre novamente.');
+          }
+        })
+        .withFailureHandler(function (error) {
+          console.error('Session verification error:', error);
+          setAuthToken('');
+          showAuthGate('Nao foi possivel validar sua sessao.');
+        })
+        .Auth_verifySession(token);
+    }
+
+    function logout() {
+      var token = getAuthToken();
+      setAuthToken('');
+      google.script.run.withSuccessHandler(function () {
+        showAuthGate('');
+      }).withFailureHandler(function () {
+        showAuthGate('');
+      }).Auth_logout(token);
+    }
+
+    window.NcaAuth = { logout: logout };
+
+    function cacheElements() {
+      elements.loading = document.getElementById('loading-overlay');
+      elements.loadingMessage = document.getElementById('loading-message');
+      elements.errorNotice = document.getElementById('error-notice');
+      elements.errorMessage = document.getElementById('error-message');
+      elements.successNotice = document.getElementById('success-notice');
+      elements.successMessage = document.getElementById('success-message');
+      elements.dialog = document.getElementById('aluno-dialog');
+      elements.form = document.getElementById('aluno-form');
+      elements.formTitle = document.getElementById('aluno-form-title');
+      elements.formSummary = document.getElementById('form-error-summary');
+      elements.submit = document.getElementById('aluno-submit');
+      elements.tableBody = document.getElementById('alunos-table-body');
+      elements.empty = document.getElementById('alunos-empty');
+      elements.count = document.getElementById('alunos-count');
+      elements.search = document.getElementById('alunos-search');
+      elements.status = document.getElementById('alunos-status');
+      elements.recent = document.getElementById('recent-alunos');
+      elements.sidebar = document.getElementById('app-sidebar');
+      elements.sidebarToggle = document.getElementById('sidebar-toggle');
+      elements.sidebarBackdrop = document.getElementById('sidebar-backdrop');
+      elements.escolaDialog = document.getElementById('escola-dialog');
+      elements.escolaForm = document.getElementById('escola-form');
+      elements.escolaFormTitle = document.getElementById('escola-form-title');
+      elements.escolaFormSummary = document.getElementById('escola-error-summary');
+      elements.escolaSubmit = document.getElementById('escola-submit');
+      elements.escolasTableBody = document.getElementById('escolas-table-body');
+      elements.escolasEmpty = document.getElementById('escolas-empty');
+      elements.escolasCount = document.getElementById('escolas-count');
+      elements.escolasSearch = document.getElementById('escolas-search');
+      elements.escolasStatus = document.getElementById('escolas-status');
+      elements.professorDialog = document.getElementById('professor-dialog');
+      elements.professorForm = document.getElementById('professor-form');
+      elements.professorFormTitle =
+        document.getElementById('professor-form-title');
+      elements.professorFormSummary =
+        document.getElementById('professor-error-summary');
+      elements.professorSubmit = document.getElementById('professor-submit');
+      elements.professoresTableBody =
+        document.getElementById('professores-table-body');
+      elements.professoresEmpty =
+        document.getElementById('professores-empty');
+      elements.professoresCount =
+        document.getElementById('professores-count');
+      elements.professoresSearch =
+        document.getElementById('professores-search');
+      elements.professoresStatus =
+        document.getElementById('professores-status');
+      elements.professoresEscola =
+        document.getElementById('professores-escola');
+      elements.analysisRefresh = document.getElementById('analysis-refresh');
+      elements.maturityRefresh = document.getElementById('maturity-refresh');
+      elements.maturitySearch = document.getElementById('maturity-search');
+      elements.maturityCategory = document.getElementById('maturity-category-filter');
+      elements.maturityStatus = document.getElementById('maturity-status-filter');
+      elements.maturityChecks = document.getElementById('maturity-checks');
+      elements.maturityEmpty = document.getElementById('maturity-empty');
+      elements.frontendMaturityRefresh =
+        document.getElementById('frontend-maturity-refresh');
+      elements.frontendMaturitySearch =
+        document.getElementById('frontend-maturity-search');
+      elements.frontendMaturityCategory =
+        document.getElementById('frontend-maturity-category-filter');
+      elements.frontendMaturityStatus =
+        document.getElementById('frontend-maturity-status-filter');
+      elements.frontendMaturityChecks =
+        document.getElementById('frontend-maturity-checks');
+      elements.frontendMaturityEmpty =
+        document.getElementById('frontend-maturity-empty');
+    }
+
+    function bindEvents() {
+      document.querySelectorAll('[data-view-target]').forEach(function (button) {
+        button.addEventListener('click', function () {
+          showView(button.getAttribute('data-view-target'));
+        });
+      });
+
+      document.querySelectorAll('[data-open-aluno-form]').forEach(function (button) {
+        button.addEventListener('click', function () {
+          openAlunoForm();
+        });
+      });
+
+      document.querySelectorAll('[data-close-aluno-form]').forEach(function (button) {
+        button.addEventListener('click', closeAlunoForm);
+      });
+      document.querySelectorAll('[data-open-escola-form]').forEach(function (button) {
+        button.addEventListener('click', function () {
+          openEscolaForm();
+        });
+      });
+      document.querySelectorAll('[data-close-escola-form]').forEach(function (button) {
+        button.addEventListener('click', closeEscolaForm);
+      });
+      document.querySelectorAll('[data-open-professor-form]').forEach(function (button) {
+        button.addEventListener('click', function () {
+          openProfessorForm();
+        });
+      });
+      document.querySelectorAll('[data-close-professor-form]').forEach(function (button) {
+        button.addEventListener('click', closeProfessorForm);
+      });
+
+      document.querySelector('[data-dismiss-error]')
+        .addEventListener('click', function () {
+          elements.errorNotice.hidden = true;
+        });
+      document.querySelector('[data-dismiss-success]')
+        .addEventListener('click', function () {
+          elements.successNotice.hidden = true;
+        });
+
+      elements.form.addEventListener('submit', saveAluno);
+      elements.escolaForm.addEventListener('submit', saveEscola);
+      elements.professorForm.addEventListener('submit', saveProfessor);
+      elements.tableBody.addEventListener('click', handleTableAction);
+      elements.escolasTableBody.addEventListener('click', handleEscolaTableAction);
+      elements.professoresTableBody.addEventListener(
+        'click',
+        handleProfessorTableAction
+      );
+      elements.search.addEventListener('input', scheduleAlunoReload);
+      elements.status.addEventListener('change', loadAlunos);
+      elements.escolasSearch.addEventListener('input', scheduleEscolaReload);
+      elements.escolasStatus.addEventListener('change', loadEscolas);
+      elements.professoresSearch.addEventListener(
+        'input',
+        scheduleProfessorReload
+      );
+      elements.professoresStatus.addEventListener('change', loadProfessores);
+      elements.professoresEscola.addEventListener('change', loadProfessores);
+      elements.analysisRefresh.addEventListener('click', function () {
+        loadAnalysisOverview(true);
+      });
+      elements.sidebarToggle.addEventListener('click', toggleSidebar);
+      elements.sidebarBackdrop.addEventListener('click', closeSidebar);
+      elements.maturityRefresh.addEventListener('click', function () {
+        loadBackendMaturity(true);
+      });
+      elements.maturitySearch.addEventListener('input', renderMaturityChecks);
+      elements.maturityCategory.addEventListener('change', renderMaturityChecks);
+      elements.maturityStatus.addEventListener('change', renderMaturityChecks);
+      elements.frontendMaturityRefresh.addEventListener('click', function () {
+        loadFrontendMaturity(true);
+      });
+      elements.frontendMaturitySearch.addEventListener(
+        'input',
+        renderFrontendMaturityChecks
+      );
+      elements.frontendMaturityCategory.addEventListener(
+        'change',
+        renderFrontendMaturityChecks
+      );
+      elements.frontendMaturityStatus.addEventListener(
+        'change',
+        renderFrontendMaturityChecks
+      );
+
+      elements.dialog.addEventListener('click', function (event) {
+        if (event.target === elements.dialog) {
+          closeAlunoForm();
+        }
+      });
+      elements.escolaDialog.addEventListener('click', function (event) {
+        if (event.target === elements.escolaDialog) {
+          closeEscolaForm();
+        }
+      });
+      elements.professorDialog.addEventListener('click', function (event) {
+        if (event.target === elements.professorDialog) {
+          closeProfessorForm();
+        }
+      });
+    }
+
+    async function loadBootstrap() {
+      setBusy(true, 'Preparando a base educacional.');
+      try {
+        var data = unwrap(await callServer('bootstrap'));
+        state.alunos = data.alunos || [];
+        state.escolas = data.escolas || [];
+        state.professores = data.professores || [];
+        updateReferences(data.references);
+        state.analysis = data.analysis || null;
+        state.recent = data.recent || state.alunos.slice(0, 5);
+        state.stats = data.stats || {};
+        renderAppInfo(data.app || {}, data.user || {});
+        renderStats();
+        renderAlunos();
+        renderEscolas();
+        renderProfessores();
+        renderRecent();
+        renderAnalysisOverview();
+      } catch (error) {
+        showError(error.message);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function loadAlunos() {
+      setBusy(true, 'Atualizando a lista de alunos.');
+      try {
+        var data = unwrap(await callServer('listAlunos', {
+          search: elements.search.value,
+          status: elements.status.value
+        }));
+        state.alunos = data.items || [];
+        updateReferences(data.references);
+        state.recent = data.recent || [];
+        state.stats = data.stats || state.stats;
+        renderStats();
+        renderAlunos();
+        renderRecent();
+      } catch (error) {
+        showError(error.message);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function loadEscolas() {
+      setBusy(true, 'Atualizando as unidades escolares.');
+      try {
+        var data = unwrap(await callServer('listEscolas', {
+          search: elements.escolasSearch.value,
+          status: elements.escolasStatus.value
+        }));
+        state.escolas = data.items || [];
+        state.stats = data.stats || state.stats;
+        updateReferences(data.references);
+        renderStats();
+        renderEscolas();
+      } catch (error) {
+        showError(error.message);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function loadProfessores() {
+      setBusy(true, 'Atualizando a equipe pedagógica.');
+      try {
+        var data = unwrap(await callServer('listProfessores', {
+          search: elements.professoresSearch.value,
+          status: elements.professoresStatus.value,
+          escolaId: elements.professoresEscola.value
+        }));
+        state.professores = data.items || [];
+        state.stats = data.stats || state.stats;
+        updateReferences(data.references);
+        renderStats();
+        renderProfessores();
+      } catch (error) {
+        showError(error.message);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function loadAnalysisOverview(showConfirmation) {
+      if (state.analysisLoading) {
+        return;
+      }
+
+      state.analysisLoading = true;
+      elements.analysisRefresh.disabled = true;
+      setBusy(true, 'Verificando a preparação da base analítica.');
+      try {
+        state.analysis = unwrap(await callServer('analysisOverview'));
+        renderAnalysisOverview();
+        if (showConfirmation) {
+          showSuccess('Diagnóstico analítico atualizado.');
+        }
+      } catch (error) {
+        showError(error.message);
+      } finally {
+        state.analysisLoading = false;
+        elements.analysisRefresh.disabled = false;
+        setBusy(false);
+      }
+    }
+
+    async function loadBackendMaturity(forceRefresh) {
+      if (state.maturityLoading) {
+        return;
+      }
+
+      state.maturityLoading = true;
+      elements.maturityRefresh.disabled = true;
+      setBusy(true, 'Analisando a maturidade do backend.');
+      try {
+        state.maturity = unwrap(await callServer('backendMaturity', {
+          force: Boolean(forceRefresh)
+        }));
+        renderBackendMaturity();
+        if (forceRefresh) {
+          showSuccess('Diagnóstico de maturidade atualizado.');
+        }
+      } catch (error) {
+        showError(error.message);
+      } finally {
+        state.maturityLoading = false;
+        elements.maturityRefresh.disabled = false;
+        setBusy(false);
+      }
+    }
+
+    async function loadFrontendMaturity(forceRefresh) {
+      if (state.frontendMaturityLoading) {
+        return;
+      }
+
+      state.frontendMaturityLoading = true;
+      elements.frontendMaturityRefresh.disabled = true;
+      setBusy(true, 'Analisando a maturidade do frontend.');
+      try {
+        state.frontendMaturity = unwrap(
+          await callServer('frontendMaturity', {
+            force: Boolean(forceRefresh)
+          })
+        );
+        renderFrontendMaturity();
+        if (forceRefresh) {
+          showSuccess('Diagnóstico do frontend atualizado.');
+        }
+      } catch (error) {
+        showError(error.message);
+      } finally {
+        state.frontendMaturityLoading = false;
+        elements.frontendMaturityRefresh.disabled = false;
+        setBusy(false);
+      }
+    }
+
+    function scheduleAlunoReload() {
+      window.clearTimeout(state.searchTimer);
+      state.searchTimer = window.setTimeout(loadAlunos, 280);
+    }
+
+    function scheduleEscolaReload() {
+      window.clearTimeout(state.escolaSearchTimer);
+      state.escolaSearchTimer = window.setTimeout(loadEscolas, 280);
+    }
+
+    function scheduleProfessorReload() {
+      window.clearTimeout(state.professorSearchTimer);
+      state.professorSearchTimer = window.setTimeout(loadProfessores, 280);
+    }
+
+    async function saveAluno(event) {
+      event.preventDefault();
+      clearFormErrors();
+
+      if (!elements.form.reportValidity()) {
+        return;
+      }
+
+      var payload = formToObject(elements.form);
+      var schoolSelect = document.getElementById('aluno-escola-id');
+      var selectedSchool = schoolSelect.options[schoolSelect.selectedIndex];
+      payload.escola = selectedSchool && selectedSchool.value
+        ? selectedSchool.textContent
+        : payload.escola;
+      setBusy(true, payload.id ? 'Atualizando aluno.' : 'Cadastrando aluno.');
+      elements.submit.disabled = true;
+
+      try {
+        var data = unwrap(await callServer('saveAluno', payload));
+        state.stats = data.stats || state.stats;
+        state.analysis = null;
+        closeAlunoForm();
+        showSuccess(payload.id ? 'Aluno atualizado com sucesso.' : 'Aluno cadastrado com sucesso.');
+        await loadAlunos();
+      } catch (error) {
+        applyFormErrors(error.details);
+        showError(error.message);
+      } finally {
+        elements.submit.disabled = false;
+        setBusy(false);
+      }
+    }
+
+    async function saveEscola(event) {
+      event.preventDefault();
+      clearEntityFormErrors(
+        elements.escolaForm,
+        elements.escolaFormSummary,
+        'data-escola-field-error'
+      );
+      if (!elements.escolaForm.reportValidity()) {
+        return;
+      }
+
+      var payload = formToObject(elements.escolaForm);
+      setBusy(true, payload.id ? 'Atualizando escola.' : 'Cadastrando escola.');
+      elements.escolaSubmit.disabled = true;
+      try {
+        var data = unwrap(await callServer('saveEscola', payload));
+        state.stats = data.stats || state.stats;
+        state.analysis = null;
+        state.escolas = data.items || state.escolas;
+        updateReferences(data.references);
+        closeEscolaForm();
+        renderStats();
+        renderEscolas();
+        renderProfessores();
+        showSuccess(payload.id ? 'Escola atualizada.' : 'Escola cadastrada.');
+      } catch (error) {
+        applyEntityFormErrors(
+          elements.escolaForm,
+          elements.escolaFormSummary,
+          'data-escola-field-error',
+          error.details
+        );
+        showError(error.message);
+      } finally {
+        elements.escolaSubmit.disabled = false;
+        setBusy(false);
+      }
+    }
+
+    async function saveProfessor(event) {
+      event.preventDefault();
+      clearEntityFormErrors(
+        elements.professorForm,
+        elements.professorFormSummary,
+        'data-professor-field-error'
+      );
+      if (!elements.professorForm.reportValidity()) {
+        return;
+      }
+
+      var payload = formToObject(elements.professorForm);
+      setBusy(
+        true,
+        payload.id ? 'Atualizando professor.' : 'Cadastrando professor.'
+      );
+      elements.professorSubmit.disabled = true;
+      try {
+        var data = unwrap(await callServer('saveProfessor', payload));
+        state.stats = data.stats || state.stats;
+        state.analysis = null;
+        closeProfessorForm();
+        showSuccess(
+          payload.id ? 'Professor atualizado.' : 'Professor cadastrado.'
+        );
+        await loadProfessores();
+        await loadEscolas();
+      } catch (error) {
+        applyEntityFormErrors(
+          elements.professorForm,
+          elements.professorFormSummary,
+          'data-professor-field-error',
+          error.details
+        );
+        showError(error.message);
+      } finally {
+        elements.professorSubmit.disabled = false;
+        setBusy(false);
+      }
+    }
+
+    async function handleTableAction(event) {
+      var button = event.target.closest('[data-aluno-action]');
+      if (!button) {
+        return;
+      }
+
+      var id = button.getAttribute('data-aluno-id');
+      var action = button.getAttribute('data-aluno-action');
+      if (action === 'edit') {
+        editAluno(id);
+        return;
+      }
+
+      if (action === 'archive') {
+        var aluno = findAluno(id);
+        var confirmed = window.confirm(
+          'Arquivar ' + (aluno ? aluno.nome : 'este aluno') + '? O registro continuará disponível no filtro de arquivados.'
+        );
+        if (!confirmed) {
+          return;
+        }
+
+        setBusy(true, 'Arquivando aluno.');
+        try {
+          var data = unwrap(await callServer('archiveAluno', id));
+          state.stats = data.stats || state.stats;
+          state.analysis = null;
+          showSuccess('Aluno arquivado. O histórico foi preservado.');
+          await loadAlunos();
+        } catch (error) {
+          showError(error.message);
+        } finally {
+          setBusy(false);
+        }
+      }
+    }
+
+    async function handleEscolaTableAction(event) {
+      var button = event.target.closest('[data-escola-action]');
+      if (!button) {
+        return;
+      }
+
+      var id = button.getAttribute('data-escola-id');
+      var action = button.getAttribute('data-escola-action');
+      if (action === 'edit') {
+        openEscolaForm(findById(state.escolas, id));
+        return;
+      }
+      if (action !== 'archive') {
+        return;
+      }
+
+      var escola = findById(state.escolas, id);
+      if (!window.confirm(
+        'Arquivar ' + (escola ? escola.nome : 'esta escola') +
+        '? A operação só será permitida se não houver vínculos ativos.'
+      )) {
+        return;
+      }
+
+      setBusy(true, 'Arquivando escola.');
+      try {
+        var data = unwrap(await callServer('archiveEscola', id));
+        state.stats = data.stats || state.stats;
+        state.analysis = null;
+        updateReferences(data.references);
+        showSuccess('Escola arquivada.');
+        await loadEscolas();
+      } catch (error) {
+        showError(error.message);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function handleProfessorTableAction(event) {
+      var button = event.target.closest('[data-professor-action]');
+      if (!button) {
+        return;
+      }
+
+      var id = button.getAttribute('data-professor-id');
+      var action = button.getAttribute('data-professor-action');
+      if (action === 'edit') {
+        openProfessorForm(findById(state.professores, id));
+        return;
+      }
+      if (action !== 'archive') {
+        return;
+      }
+
+      var professor = findById(state.professores, id);
+      if (!window.confirm(
+        'Arquivar ' + (professor ? professor.nome : 'este professor') + '?'
+      )) {
+        return;
+      }
+
+      setBusy(true, 'Arquivando professor.');
+      try {
+        var data = unwrap(await callServer('archiveProfessor', id));
+        state.stats = data.stats || state.stats;
+        state.analysis = null;
+        showSuccess('Professor arquivado.');
+        await loadProfessores();
+        await loadEscolas();
+      } catch (error) {
+        showError(error.message);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    function editAluno(id) {
+      var aluno = findAluno(id);
+      if (!aluno) {
+        showError('O aluno selecionado não está mais na lista.');
+        return;
+      }
+      openAlunoForm(aluno);
+    }
+
+    function openAlunoForm(aluno) {
+      elements.form.reset();
+      clearFormErrors();
+      var record = aluno || {};
+
+      Object.keys(record).forEach(function (key) {
+        var field = elements.form.elements.namedItem(key);
+        if (field && record[key] !== null && typeof record[key] !== 'undefined') {
+          field.value = record[key];
+        }
+      });
+
+      elements.formTitle.textContent = record.id ? 'Editar aluno' : 'Cadastrar aluno';
+      elements.submit.textContent = record.id ? 'Salvar alterações' : 'Salvar aluno';
+      renderSchoolSelectOptions(
+        document.getElementById('aluno-escola-id'),
+        record.escolaId,
+        record.escola
+      );
+
+      if (typeof elements.dialog.showModal === 'function') {
+        elements.dialog.showModal();
+      } else {
+        elements.dialog.setAttribute('open', 'open');
+      }
+      window.setTimeout(function () {
+        document.getElementById('aluno-nome').focus();
+      }, 30);
+    }
+
+    function closeAlunoForm() {
+      if (typeof elements.dialog.close === 'function') {
+        elements.dialog.close();
+      } else {
+        elements.dialog.removeAttribute('open');
+      }
+    }
+
+    function openEscolaForm(escola) {
+      elements.escolaForm.reset();
+      clearEntityFormErrors(
+        elements.escolaForm,
+        elements.escolaFormSummary,
+        'data-escola-field-error'
+      );
+      var record = escola || {};
+      populateForm(elements.escolaForm, record);
+      elements.escolaFormTitle.textContent =
+        record.id ? 'Editar escola' : 'Cadastrar escola';
+      elements.escolaSubmit.textContent =
+        record.id ? 'Salvar alterações' : 'Salvar escola';
+      showDialog(elements.escolaDialog);
+      window.setTimeout(function () {
+        document.getElementById('escola-nome').focus();
+      }, 30);
+    }
+
+    function closeEscolaForm() {
+      closeDialog(elements.escolaDialog);
+    }
+
+    function openProfessorForm(professor) {
+      if (!state.references.escolas.length) {
+        showError('Cadastre uma escola ativa antes de incluir professores.');
+        showView('escolas');
+        return;
+      }
+      elements.professorForm.reset();
+      clearEntityFormErrors(
+        elements.professorForm,
+        elements.professorFormSummary,
+        'data-professor-field-error'
+      );
+      var record = professor || {};
+      renderSchoolSelectOptions(
+        document.getElementById('professor-escola-id'),
+        record.escolaId
+      );
+      populateForm(elements.professorForm, record);
+      elements.professorFormTitle.textContent =
+        record.id ? 'Editar professor' : 'Cadastrar professor';
+      elements.professorSubmit.textContent =
+        record.id ? 'Salvar alterações' : 'Salvar professor';
+      showDialog(elements.professorDialog);
+      window.setTimeout(function () {
+        document.getElementById('professor-nome').focus();
+      }, 30);
+    }
+
+    function closeProfessorForm() {
+      closeDialog(elements.professorDialog);
+    }
+
+    function showView(viewName) {
+      document.querySelectorAll('.app-view').forEach(function (view) {
+        var isTarget = view.id === 'view-' + viewName;
+        view.hidden = !isTarget;
+        view.classList.toggle('is-active', isTarget);
+      });
+
+      document.querySelectorAll('.nav-item').forEach(function (button) {
+        var isTarget = button.getAttribute('data-view-target') === viewName;
+        button.classList.toggle('is-active', isTarget);
+        if (isTarget) {
+          button.setAttribute('aria-current', 'page');
+        } else {
+          button.removeAttribute('aria-current');
+        }
+      });
+
+      closeSidebar();
+      document.getElementById('main-content').focus();
+
+      if (viewName === 'backend-maturity' && !state.maturity) {
+        loadBackendMaturity(false);
+      }
+      if (viewName === 'frontend-maturity' && !state.frontendMaturity) {
+        loadFrontendMaturity(false);
+      }
+      if (viewName === 'analises' && !state.analysis) {
+        loadAnalysisOverview(false);
+      }
+    }
+
+    function renderAppInfo(app, user) {
+      var displayName = user.displayName || user.nome || user.username || 'Usuário';
+      document.getElementById('app-version').textContent = 'Versão ' + (app.version || '--');
+      document.getElementById('user-name').textContent = displayName;
+      document.getElementById('user-email').textContent =
+        user.email || 'Sessão do Apps Script';
+      document.getElementById('user-initial').textContent =
+        String(displayName).charAt(0).toUpperCase();
+    }
+
+    function renderStats() {
+      var stats = state.stats || {};
+      setText('metric-total-alunos', stats.totalAlunos || 0);
+      setText('metric-escolas', stats.escolasAtendidas || 0);
+      setText('metric-professores', stats.totalProfessores || 0);
+      setText('metric-matematica', formatScore(stats.mediaMatematica));
+      setText('metric-frequencia', formatPercent(stats.frequenciaMedia));
+
+      var updated = stats.atualizadosEm ? new Date(stats.atualizadosEm) : new Date();
+      document.getElementById('last-updated').textContent =
+        'Atualizado às ' +
+        updated.toLocaleTimeString('pt-BR', {
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+    }
+
+    function renderAlunos() {
+      var rows = state.alunos.map(function (aluno) {
+        var statusClass = aluno.status === 'inativo' ? ' is-inactive' : '';
+        var archiveButton = aluno.status === 'inativo'
+          ? ''
+          : (
+            '<button class="table-action is-danger" type="button" ' +
+            'data-aluno-action="archive" data-aluno-id="' + escapeHtml(aluno.id) + '">' +
+            'Arquivar</button>'
+          );
+
+        return (
+          '<tr>' +
+            '<td class="cell-primary"><strong>' + escapeHtml(aluno.nome) + '</strong>' +
+              '<small>' + escapeHtml(aluno.serie || '--') + '</small></td>' +
+            '<td>' + escapeHtml(aluno.escola || '--') + '</td>' +
+            '<td>' + escapeHtml(aluno.turma || '--') + '</td>' +
+            '<td>' + formatScore(aluno.notaMatematica) + '</td>' +
+            '<td>' + formatScore(aluno.notaPortugues) + '</td>' +
+            '<td>' + formatPercent(aluno.frequencia) + '</td>' +
+            '<td><span class="status-badge' + statusClass + '">' +
+              escapeHtml(aluno.status || 'ativo') + '</span></td>' +
+            '<td><div class="row-actions">' +
+              '<button class="table-action" type="button" data-aluno-action="edit" ' +
+                'data-aluno-id="' + escapeHtml(aluno.id) + '">Editar</button>' +
+              archiveButton +
+            '</div></td>' +
+          '</tr>'
+        );
+      });
+
+      elements.tableBody.innerHTML = rows.join('');
+      elements.empty.hidden = state.alunos.length !== 0;
+      elements.count.textContent = state.alunos.length === 1
+        ? '1 registro encontrado.'
+        : state.alunos.length + ' registros encontrados.';
+    }
+
+    function renderEscolas() {
+      elements.escolasTableBody.innerHTML = state.escolas.map(function (escola) {
+        var statusClass = escola.status === 'inativo' ? ' is-inactive' : '';
+        var archiveButton = escola.status === 'inativo'
+          ? ''
+          : (
+            '<button class="table-action is-danger" type="button" ' +
+            'data-escola-action="archive" data-escola-id="' +
+            escapeHtml(escola.id) + '">Arquivar</button>'
+          );
+        return (
+          '<tr>' +
+            '<td class="cell-primary"><strong>' + escapeHtml(escola.nome) +
+              '</strong><small>INEP ' +
+              escapeHtml(escola.codigoInep || 'não informado') +
+              '</small></td>' +
+            '<td>' + escapeHtml(escola.municipio || '--') + ' / ' +
+              escapeHtml(escola.uf || '--') + '</td>' +
+            '<td class="cell-primary"><strong>' +
+              escapeHtml(escola.rede || '--') + '</strong><small>' +
+              escapeHtml(escola.etapas || 'Etapas não informadas') +
+              '</small></td>' +
+            '<td>' + escapeHtml(escola.totalAlunos || 0) + '</td>' +
+            '<td>' + escapeHtml(escola.totalProfessores || 0) + '</td>' +
+            '<td><span class="status-badge' + statusClass + '">' +
+              escapeHtml(escola.status || 'ativo') + '</span></td>' +
+            '<td><div class="row-actions">' +
+              '<button class="table-action" type="button" ' +
+                'data-escola-action="edit" data-escola-id="' +
+                escapeHtml(escola.id) + '">Editar</button>' +
+              archiveButton +
+            '</div></td>' +
+          '</tr>'
+        );
+      }).join('');
+      elements.escolasEmpty.hidden = state.escolas.length !== 0;
+      elements.escolasCount.textContent = state.escolas.length === 1
+        ? '1 unidade encontrada.'
+        : state.escolas.length + ' unidades encontradas.';
+    }
+
+    function renderProfessores() {
+      elements.professoresTableBody.innerHTML =
+        state.professores.map(function (professor) {
+          var statusClass =
+            professor.status === 'inativo' ? ' is-inactive' : '';
+          var archiveButton = professor.status === 'inativo'
+            ? ''
+            : (
+              '<button class="table-action is-danger" type="button" ' +
+              'data-professor-action="archive" data-professor-id="' +
+              escapeHtml(professor.id) + '">Arquivar</button>'
+            );
+          return (
+            '<tr>' +
+              '<td class="cell-primary"><strong>' +
+                escapeHtml(professor.nome) + '</strong><small>' +
+                escapeHtml(professor.email || 'E-mail não informado') +
+                '</small></td>' +
+              '<td>' + escapeHtml(professor.escola || '--') + '</td>' +
+              '<td>' + escapeHtml(professor.disciplina || '--') + '</td>' +
+              '<td>' + (
+                professor.cargaHoraria === '' ||
+                professor.cargaHoraria === null ||
+                typeof professor.cargaHoraria === 'undefined'
+                  ? '--'
+                  : escapeHtml(professor.cargaHoraria) + ' h'
+              ) + '</td>' +
+              '<td>' + (toBoolean(professor.bolsa) ? 'Sim' : 'Não') + '</td>' +
+              '<td><span class="status-badge' + statusClass + '">' +
+                escapeHtml(professor.status || 'ativo') + '</span></td>' +
+              '<td><div class="row-actions">' +
+                '<button class="table-action" type="button" ' +
+                  'data-professor-action="edit" data-professor-id="' +
+                  escapeHtml(professor.id) + '">Editar</button>' +
+                archiveButton +
+              '</div></td>' +
+            '</tr>'
+          );
+        }).join('');
+      elements.professoresEmpty.hidden = state.professores.length !== 0;
+      elements.professoresCount.textContent = state.professores.length === 1
+        ? '1 professor encontrado.'
+        : state.professores.length + ' professores encontrados.';
+    }
+
+    function updateReferences(references) {
+      if (references && Array.isArray(references.escolas)) {
+        state.references.escolas = references.escolas;
+      }
+      renderSchoolSelectOptions(document.getElementById('aluno-escola-id'));
+      renderSchoolSelectOptions(
+        document.getElementById('professor-escola-id')
+      );
+      renderSchoolFilterOptions();
+    }
+
+    function renderSchoolSelectOptions(select, selectedId, fallbackName) {
+      if (!select) {
+        return;
+      }
+      var currentValue = typeof selectedId !== 'undefined'
+        ? String(selectedId || '')
+        : String(select.value || '');
+      var options = state.references.escolas.map(function (escola) {
+        return (
+          '<option value="' + escapeHtml(escola.id) + '">' +
+            escapeHtml(escola.nome) +
+          '</option>'
+        );
+      });
+      if (
+        currentValue &&
+        !state.references.escolas.some(function (escola) {
+          return String(escola.id) === currentValue;
+        })
+      ) {
+        options.unshift(
+          '<option value="' + escapeHtml(currentValue) + '">' +
+            escapeHtml(fallbackName || 'Escola vinculada') +
+          '</option>'
+        );
+      }
+      select.innerHTML =
+        '<option value="">Selecione uma escola</option>' +
+        options.join('');
+      select.value = currentValue;
+    }
+
+    function renderSchoolFilterOptions() {
+      var currentValue = elements.professoresEscola.value;
+      elements.professoresEscola.innerHTML =
+        '<option value="">Todas</option>' +
+        state.references.escolas.map(function (escola) {
+          return '<option value="' + escapeHtml(escola.id) + '">' +
+            escapeHtml(escola.nome) + '</option>';
+        }).join('');
+      elements.professoresEscola.value = currentValue;
+    }
+
+    function renderRecent() {
+      var items = state.recent.slice(0, 5);
+      if (!items.length) {
+        elements.recent.innerHTML =
+          '<div class="empty-state">' +
+            '<span class="empty-index" aria-hidden="true">00</span>' +
+            '<h3>A base está pronta</h3>' +
+            '<p>Cadastre o primeiro aluno para começar a formar os indicadores.</p>' +
+          '</div>';
+        return;
+      }
+
+      elements.recent.innerHTML = items.map(function (aluno) {
+        return (
+          '<article class="recent-item">' +
+            '<div class="recent-person"><strong>' + escapeHtml(aluno.nome) + '</strong>' +
+              '<small>' + escapeHtml(aluno.serie || '--') + ' · ' +
+              escapeHtml(aluno.turma || '--') + '</small></div>' +
+            '<span class="recent-school">' + escapeHtml(aluno.escola || '--') + '</span>' +
+            '<span class="status-badge' +
+              (aluno.status === 'inativo' ? ' is-inactive' : '') + '">' +
+              escapeHtml(aluno.status || 'ativo') + '</span>' +
+          '</article>'
+        );
+      }).join('');
+    }
+
+    function renderAnalysisOverview() {
+      var overview = state.analysis;
+      if (!overview) {
+        return;
+      }
+
+      var summary = overview.summary || {};
+      var methods = overview.methods || [];
+      var priorities = overview.priorities || [];
+      var dimensions = overview.dimensions || [];
+      var generatedAt = overview.generatedAt
+        ? new Date(overview.generatedAt)
+        : null;
+
+      setText('analysis-alunos', summary.alunos || 0);
+      setText('analysis-escolas', summary.escolas || 0);
+      setText('analysis-professores', summary.professores || 0);
+      setText('analysis-coverage', (summary.averageCoverage || 0) + '%');
+      setText(
+        'analysis-updated',
+        generatedAt && !isNaN(generatedAt.getTime())
+          ? 'Atualizado em ' + generatedAt.toLocaleDateString('pt-BR') +
+            ' às ' + generatedAt.toLocaleTimeString('pt-BR', {
+              hour: '2-digit',
+              minute: '2-digit'
+            })
+          : 'Atualização não informada'
+      );
+      document.getElementById('analysis-disclaimer').textContent =
+        overview.disclaimer || '';
+
+      document.getElementById('analysis-methods').innerHTML =
+        methods.map(function (method) {
+          var checks = method.checks || [];
+          return (
+            '<article class="analysis-method">' +
+              '<div class="analysis-method-heading">' +
+                '<div><h3>' + escapeHtml(method.label) + '</h3>' +
+                  '<p>' + escapeHtml(method.description) + '</p></div>' +
+                '<span class="maturity-status analysis-status-' +
+                  escapeHtml(method.status || 'blocked') + '">' +
+                  escapeHtml(method.statusLabel || 'Não avaliado') +
+                '</span>' +
+              '</div>' +
+              '<ul class="analysis-checks">' +
+                checks.map(function (check) {
+                  return (
+                    '<li class="analysis-check' +
+                      (check.passed ? ' is-passed' : '') + '">' +
+                      '<div><strong>' + escapeHtml(check.label) + '</strong>' +
+                        '<small>' + escapeHtml(check.detail) + '</small></div>' +
+                    '</li>'
+                  );
+                }).join('') +
+              '</ul>' +
+            '</article>'
+          );
+        }).join('');
+
+      document.getElementById('analysis-priorities').innerHTML =
+        priorities.map(function (priority) {
+          return '<li>' + escapeHtml(priority) + '</li>';
+        }).join('');
+
+      document.getElementById('analysis-dimensions').innerHTML =
+        dimensions.map(function (dimension) {
+          var coverage = Math.max(
+            0,
+            Math.min(100, Number(dimension.coverage) || 0)
+          );
+          return (
+            '<article class="maturity-category">' +
+              '<div class="maturity-category-heading">' +
+                '<strong>' + escapeHtml(dimension.label) + '</strong>' +
+                '<span>' + coverage + '% · ' +
+                  formatCompactNumber(dimension.records) + ' registros</span>' +
+              '</div>' +
+              '<div class="maturity-progress" role="progressbar" ' +
+                'aria-label="' + escapeHtml(dimension.label) + '" ' +
+                'aria-valuemin="0" aria-valuemax="100" ' +
+                'aria-valuenow="' + coverage + '">' +
+                '<span style="--progress:' + coverage + '%"></span>' +
+              '</div>' +
+            '</article>'
+          );
+        }).join('');
+    }
+
+    function renderBackendMaturity() {
+      var assessment = state.maturity;
+      if (!assessment) {
+        return;
+      }
+
+      var score = Number(assessment.score) || 0;
+      var inventory = assessment.inventory || {};
+      var level = assessment.level || {};
+      var generatedAt = new Date(assessment.generatedAt);
+      var source = assessment.source || {};
+
+      setText('maturity-score', formatCompactNumber(score));
+      setText(
+        'maturity-level',
+        'Nível ' + (level.number || '--') + ' · ' + (level.name || 'Sem classificação')
+      );
+      setText(
+        'maturity-level-description',
+        level.description || 'Classificação não disponível.'
+      );
+      setText(
+        'maturity-implemented',
+        String(inventory.implementedSourceFiles || 0)
+      );
+      setText(
+        'maturity-implemented-context',
+        'de ' + (inventory.sourceFiles || 0) + ' módulos executáveis'
+      );
+      setText(
+        'maturity-priority-count',
+        String((assessment.priorities || []).length)
+      );
+      setText('maturity-profile', assessment.profile || 'Backend');
+
+      if (!isNaN(generatedAt.getTime())) {
+        setText(
+          'maturity-generated-date',
+          generatedAt.toLocaleDateString('pt-BR', {
+            day: '2-digit',
+            month: 'short'
+          }).replace('.', '')
+        );
+        setText(
+          'maturity-generated-time',
+          generatedAt.toLocaleTimeString('pt-BR', {
+            hour: '2-digit',
+            minute: '2-digit'
+          })
+        );
+      }
+
+      var scoreRing = document.getElementById('maturity-score-ring');
+      scoreRing.style.setProperty(
+        '--maturity-score-angle',
+        Math.max(0, Math.min(100, score)) * 3.6 + 'deg'
+      );
+      scoreRing.setAttribute(
+        'aria-label',
+        'Pontuação de maturidade: ' + formatCompactNumber(score) + ' de 100'
+      );
+
+      var sourceNotice = document.getElementById('maturity-source-notice');
+      sourceNotice.hidden = false;
+      sourceNotice.classList.toggle('is-live', source.mode === 'live');
+      sourceNotice.innerHTML =
+        '<strong>' + escapeHtml(source.label || 'Origem da análise') + '.</strong> ' +
+        escapeHtml(source.message || 'Origem não informada.');
+
+      renderMaturityCategories();
+      renderMaturityPriorities();
+      renderMaturityCategoryOptions();
+      renderMaturityChecks();
+    }
+
+    function renderMaturityCategories() {
+      var categories = state.maturity.categories || [];
+      document.getElementById('maturity-categories').innerHTML =
+        categories.map(function (category) {
+          var percentage = Math.round((Number(category.ratio) || 0) * 100);
+          return (
+            '<article class="maturity-category">' +
+              '<div class="maturity-category-heading">' +
+                '<strong>' + escapeHtml(category.label) + '</strong>' +
+                '<span>' + formatCompactNumber(category.score) + ' / ' +
+                  formatCompactNumber(category.weight) + ' · ' + percentage + '%</span>' +
+              '</div>' +
+              '<div class="maturity-progress" role="progressbar" ' +
+                'aria-label="' + escapeHtml(category.label) + '" aria-valuemin="0" ' +
+                'aria-valuemax="100" aria-valuenow="' + percentage + '">' +
+                '<span style="--progress:' + percentage + '%"></span>' +
+              '</div>' +
+            '</article>'
+          );
+        }).join('');
+    }
+
+    function renderMaturityPriorities() {
+      var priorities = state.maturity.priorities || [];
+      if (!priorities.length) {
+        document.getElementById('maturity-priorities').innerHTML =
+          '<li class="empty-state">' +
+            '<span class="empty-index" aria-hidden="true">100</span>' +
+            '<h3>Nenhuma lacuna prioritária</h3>' +
+            '<p>As verificações atuais não possuem gaps relevantes.</p>' +
+          '</li>';
+        return;
+      }
+      document.getElementById('maturity-priorities').innerHTML =
+        priorities.map(function (priority) {
+          return (
+            '<li class="maturity-priority-item">' +
+              '<div class="maturity-priority-title">' +
+                '<strong>' + escapeHtml(priority.title) + '</strong>' +
+                '<small>' + escapeHtml(priority.categoryLabel) + ' · ' +
+                  escapeHtml(priority.statusLabel) + '</small>' +
+              '</div>' +
+              '<p class="maturity-priority-action">' +
+                escapeHtml(priority.recommendation) +
+              '</p>' +
+              '<span class="maturity-gap">gap ' +
+                formatCompactNumber(priority.gap) + '</span>' +
+            '</li>'
+          );
+        }).join('');
+    }
+
+    function renderMaturityCategoryOptions() {
+      var currentValue = elements.maturityCategory.value;
+      var categories = state.maturity.categories || [];
+      elements.maturityCategory.innerHTML =
+        '<option value="">Todas</option>' +
+        categories.map(function (category) {
+          return '<option value="' + escapeHtml(category.id) + '">' +
+            escapeHtml(category.label) + '</option>';
+        }).join('');
+      elements.maturityCategory.value = currentValue;
+    }
+
+    function renderMaturityChecks() {
+      if (!state.maturity) {
+        return;
+      }
+
+      var search = elements.maturitySearch.value.trim().toLowerCase();
+      var category = elements.maturityCategory.value;
+      var status = elements.maturityStatus.value;
+      var checks = (state.maturity.checks || []).filter(function (check) {
+        if (category && check.category !== category) {
+          return false;
+        }
+        if (status && check.status !== status) {
+          return false;
+        }
+        if (!search) {
+          return true;
+        }
+        var evidenceText = (check.evidence || []).map(function (item) {
+          return item.path + ' ' + item.excerpt;
+        }).join(' ');
+        var haystack = [
+          check.title,
+          check.categoryLabel,
+          check.statusLabel,
+          check.recommendation,
+          evidenceText
+        ].join(' ').toLowerCase();
+        return haystack.indexOf(search) !== -1;
+      });
+
+      elements.maturityChecks.innerHTML = checks.map(function (check) {
+        var percentage = Math.round((Number(check.ratio) || 0) * 100);
+        var evidence = check.evidence || [];
+        var evidenceHtml = evidence.length
+          ? (
+            '<ul class="maturity-evidence-list">' +
+              evidence.map(function (item) {
+                return (
+                  '<li><code>' + escapeHtml(item.path) + ':' +
+                    escapeHtml(item.line) + '</code>' +
+                    '<span>' + escapeHtml(item.excerpt) + '</span></li>'
+                );
+              }).join('') +
+            '</ul>'
+          )
+          : '<p class="muted-text">Nenhuma evidência implementada foi encontrada.</p>';
+
+        return (
+          '<details class="maturity-check">' +
+            '<summary>' +
+              '<span class="maturity-check-title">' +
+                '<strong>' + escapeHtml(check.title) + '</strong>' +
+                '<small>' + escapeHtml(check.categoryLabel) + '</small>' +
+              '</span>' +
+              '<span class="maturity-check-score">' +
+                '<span class="maturity-progress" aria-hidden="true">' +
+                  '<span style="--progress:' + percentage + '%"></span>' +
+                '</span>' +
+                '<span>' + formatCompactNumber(check.score) + ' / ' +
+                  formatCompactNumber(check.weight) + '</span>' +
+              '</span>' +
+              '<span class="maturity-status maturity-status-' +
+                escapeHtml(check.status) + '">' +
+                escapeHtml(check.statusLabel) +
+              '</span>' +
+              '<span class="maturity-disclosure" aria-hidden="true">+</span>' +
+            '</summary>' +
+            '<div class="maturity-check-body">' +
+              '<div class="maturity-recommendation">' +
+                '<h3>Próximo passo</h3>' +
+                '<p>' + escapeHtml(check.recommendation) + '</p>' +
+              '</div>' +
+              '<div class="maturity-evidence">' +
+                '<h3>Evidências</h3>' +
+                evidenceHtml +
+              '</div>' +
+            '</div>' +
+          '</details>'
+        );
+      }).join('');
+
+      elements.maturityEmpty.hidden = checks.length !== 0;
+      setText(
+        'maturity-check-count',
+        checks.length === 1
+          ? '1 verificação'
+          : checks.length + ' verificações'
+      );
+    }
+
+    function renderFrontendMaturity() {
+      var assessment = state.frontendMaturity;
+      if (!assessment) {
+        return;
+      }
+
+      var score = Number(assessment.score) || 0;
+      var inventory = assessment.inventory || {};
+      var stats = inventory.stats || {};
+      var level = assessment.level || {};
+      var generatedAt = new Date(assessment.generatedAt);
+      var source = assessment.source || {};
+
+      setText('frontend-maturity-score', formatCompactNumber(score));
+      setText(
+        'frontend-maturity-level',
+        'Nível ' + (level.number || '--') + ' · ' +
+          (level.name || 'Sem classificação')
+      );
+      setText(
+        'frontend-maturity-level-description',
+        level.description || 'Classificação não disponível.'
+      );
+      setText(
+        'frontend-maturity-intuition',
+        formatCompactNumber(assessment.intuitivenessScore) + '%'
+      );
+      setText(
+        'frontend-maturity-implemented',
+        String(inventory.implementedFrontendFiles || 0)
+      );
+      setText(
+        'frontend-maturity-implemented-context',
+        'de ' + (inventory.frontendFiles || 0) + ' arquivos frontend'
+      );
+      setText(
+        'frontend-maturity-controls',
+        String(stats.controls || 0)
+      );
+      setText(
+        'frontend-maturity-controls-context',
+        (stats.interactiveElements || 0) + ' ações interativas'
+      );
+      setText(
+        'frontend-maturity-profile',
+        assessment.profile || 'Frontend'
+      );
+
+      if (!isNaN(generatedAt.getTime())) {
+        setText(
+          'frontend-maturity-generated',
+          'Atualizado em ' +
+            generatedAt.toLocaleDateString('pt-BR') +
+            ' às ' +
+            generatedAt.toLocaleTimeString('pt-BR', {
+              hour: '2-digit',
+              minute: '2-digit'
+            })
+        );
+      }
+
+      var scoreRing = document.getElementById(
+        'frontend-maturity-score-ring'
+      );
+      scoreRing.style.setProperty(
+        '--maturity-score-angle',
+        Math.max(0, Math.min(100, score)) * 3.6 + 'deg'
+      );
+      scoreRing.setAttribute(
+        'aria-label',
+        'Pontuação de maturidade do frontend: ' +
+          formatCompactNumber(score) +
+          ' de 100'
+      );
+
+      var sourceNotice = document.getElementById(
+        'frontend-maturity-source-notice'
+      );
+      sourceNotice.hidden = false;
+      sourceNotice.classList.toggle('is-live', source.mode === 'live');
+      sourceNotice.innerHTML =
+        '<strong>' +
+          escapeHtml(source.label || 'Origem da análise') +
+          '.</strong> ' +
+          escapeHtml(source.message || 'Origem não informada.');
+
+      renderFrontendMaturityCategories();
+      renderFrontendMaturityPriorities();
+      renderFrontendMaturityCategoryOptions();
+      renderFrontendMaturityChecks();
+    }
+
+    function renderFrontendMaturityCategories() {
+      var categories = state.frontendMaturity.categories || [];
+      document.getElementById('frontend-maturity-categories').innerHTML =
+        categories.map(function (category) {
+          var percentage = Math.round((Number(category.ratio) || 0) * 100);
+          return (
+            '<article class="maturity-category">' +
+              '<div class="maturity-category-heading">' +
+                '<strong>' + escapeHtml(category.label) + '</strong>' +
+                '<span>' + formatCompactNumber(category.score) + ' / ' +
+                  formatCompactNumber(category.weight) + ' · ' +
+                  percentage + '%</span>' +
+              '</div>' +
+              '<div class="maturity-progress" role="progressbar" ' +
+                'aria-label="' + escapeHtml(category.label) + '" ' +
+                'aria-valuemin="0" aria-valuemax="100" ' +
+                'aria-valuenow="' + percentage + '">' +
+                '<span style="--progress:' + percentage + '%"></span>' +
+              '</div>' +
+            '</article>'
+          );
+        }).join('');
+    }
+
+    function renderFrontendMaturityPriorities() {
+      var priorities = state.frontendMaturity.priorities || [];
+      var container = document.getElementById(
+        'frontend-maturity-priorities'
+      );
+      if (!priorities.length) {
+        container.innerHTML =
+          '<li class="empty-state">' +
+            '<span class="empty-index" aria-hidden="true">100</span>' +
+            '<h3>Nenhuma lacuna prioritária</h3>' +
+            '<p>As verificações atuais não possuem gaps relevantes.</p>' +
+          '</li>';
+        return;
+      }
+      container.innerHTML = priorities.map(function (priority) {
+        return (
+          '<li class="maturity-priority-item">' +
+            '<div class="maturity-priority-title">' +
+              '<strong>' + escapeHtml(priority.title) + '</strong>' +
+              '<small>' + escapeHtml(priority.categoryLabel) + ' · ' +
+                escapeHtml(priority.statusLabel) + '</small>' +
+            '</div>' +
+            '<p class="maturity-priority-action">' +
+              escapeHtml(priority.recommendation) +
+            '</p>' +
+            '<span class="maturity-gap">gap ' +
+              formatCompactNumber(priority.gap) + '</span>' +
+          '</li>'
+        );
+      }).join('');
+    }
+
+    function renderFrontendMaturityCategoryOptions() {
+      var currentValue = elements.frontendMaturityCategory.value;
+      var categories = state.frontendMaturity.categories || [];
+      elements.frontendMaturityCategory.innerHTML =
+        '<option value="">Todas</option>' +
+        categories.map(function (category) {
+          return '<option value="' + escapeHtml(category.id) + '">' +
+            escapeHtml(category.label) + '</option>';
+        }).join('');
+      elements.frontendMaturityCategory.value = currentValue;
+    }
+
+    function renderFrontendMaturityChecks() {
+      if (!state.frontendMaturity) {
+        return;
+      }
+
+      var search = elements.frontendMaturitySearch.value
+        .trim()
+        .toLowerCase();
+      var category = elements.frontendMaturityCategory.value;
+      var status = elements.frontendMaturityStatus.value;
+      var checks = (state.frontendMaturity.checks || []).filter(
+        function (check) {
+          if (category && check.category !== category) {
+            return false;
+          }
+          if (status && check.status !== status) {
+            return false;
+          }
+          if (!search) {
+            return true;
+          }
+          var evidenceText = (check.evidence || []).map(function (item) {
+            return item.path + ' ' + item.excerpt;
+          }).join(' ');
+          return [
+            check.title,
+            check.categoryLabel,
+            check.statusLabel,
+            check.recommendation,
+            evidenceText
+          ].join(' ').toLowerCase().indexOf(search) !== -1;
+        }
+      );
+
+      elements.frontendMaturityChecks.innerHTML = checks.map(
+        function (check) {
+          var percentage = Math.round((Number(check.ratio) || 0) * 100);
+          var evidence = check.evidence || [];
+          var evidenceHtml = evidence.length
+            ? (
+              '<ul class="maturity-evidence-list">' +
+                evidence.map(function (item) {
+                  return (
+                    '<li><code>' + escapeHtml(item.path) + ':' +
+                      escapeHtml(item.line) + '</code>' +
+                      '<span>' + escapeHtml(item.excerpt) + '</span></li>'
+                  );
+                }).join('') +
+              '</ul>'
+            )
+            : '<p class="muted-text">Nenhuma evidência implementada foi encontrada.</p>';
+
+          return (
+            '<details class="maturity-check">' +
+              '<summary>' +
+                '<span class="maturity-check-title">' +
+                  '<strong>' + escapeHtml(check.title) + '</strong>' +
+                  '<small>' + escapeHtml(check.categoryLabel) + '</small>' +
+                '</span>' +
+                '<span class="maturity-check-score">' +
+                  '<span class="maturity-progress" aria-hidden="true">' +
+                    '<span style="--progress:' + percentage + '%"></span>' +
+                  '</span>' +
+                  '<span>' + formatCompactNumber(check.score) + ' / ' +
+                    formatCompactNumber(check.weight) + '</span>' +
+                '</span>' +
+                '<span class="maturity-status maturity-status-' +
+                  escapeHtml(check.status) + '">' +
+                  escapeHtml(check.statusLabel) +
+                '</span>' +
+                '<span class="maturity-disclosure" aria-hidden="true">+</span>' +
+              '</summary>' +
+              '<div class="maturity-check-body">' +
+                '<div class="maturity-recommendation">' +
+                  '<h3>Próximo passo</h3>' +
+                  '<p>' + escapeHtml(check.recommendation) + '</p>' +
+                '</div>' +
+                '<div class="maturity-evidence">' +
+                  '<h3>Evidências</h3>' +
+                  evidenceHtml +
+                '</div>' +
+              '</div>' +
+            '</details>'
+          );
+        }
+      ).join('');
+
+      elements.frontendMaturityEmpty.hidden = checks.length !== 0;
+      setText(
+        'frontend-maturity-check-count',
+        checks.length === 1
+          ? '1 verificação'
+          : checks.length + ' verificações'
+      );
+    }
+
+    function callServer(method, payload) {
+      return new Promise(function (resolve, reject) {
+        if (!window.google || !google.script || !google.script.run) {
+          reject(new Error('A ponte com o Google Apps Script não está disponível.'));
+          return;
+        }
+
+        var runner = google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(function (error) {
+            reject(new Error(error && error.message ? error.message : 'Falha de comunicação.'));
+          });
+
+        var token = getAuthToken();
+        if (method === 'bootstrap') {
+          runner.ApiEndpoints_getBootstrap(token);
+        } else if (method === 'listAlunos') {
+          runner.ApiEndpoints_listAlunos(payload || {}, token);
+        } else if (method === 'saveAluno') {
+          runner.ApiEndpoints_saveAluno(payload || {}, token);
+        } else if (method === 'archiveAluno') {
+          runner.ApiEndpoints_archiveAluno(payload, token);
+        } else if (method === 'listEscolas') {
+          runner.ApiEndpoints_listEscolas(payload || {}, token);
+        } else if (method === 'saveEscola') {
+          runner.ApiEndpoints_saveEscola(payload || {}, token);
+        } else if (method === 'archiveEscola') {
+          runner.ApiEndpoints_archiveEscola(payload, token);
+        } else if (method === 'listProfessores') {
+          runner.ApiEndpoints_listProfessores(payload || {}, token);
+        } else if (method === 'saveProfessor') {
+          runner.ApiEndpoints_saveProfessor(payload || {}, token);
+        } else if (method === 'archiveProfessor') {
+          runner.ApiEndpoints_archiveProfessor(payload, token);
+        } else if (method === 'analysisOverview') {
+          runner.ApiEndpoints_getAnalysisOverview(token);
+        } else if (method === 'backendMaturity') {
+          runner.ApiEndpoints_getBackendMaturity(payload || {}, token);
+        } else if (method === 'frontendMaturity') {
+          runner.ApiEndpoints_getFrontendMaturity(payload || {}, token);
+        } else {
+          reject(new Error('Operação de servidor desconhecida.'));
+        }
+      });
+    }
+
+    function unwrap(response) {
+      if (!response || response.ok !== true) {
+        var apiError = response && response.error ? response.error : {};
+        var error = new Error(apiError.message || 'A operação não pôde ser concluída.');
+        error.code = apiError.code || 'API_ERROR';
+        error.details = apiError.details || null;
+        if (error.code === 'UNAUTHORIZED') {
+          setAuthToken('');
+          showAuthGate(error.message);
+        }
+        throw error;
+      }
+      return response.data;
+    }
+
+    function setBusy(isBusy, message) {
+      state.busy += isBusy ? 1 : -1;
+      state.busy = Math.max(0, state.busy);
+      elements.loading.hidden = state.busy === 0;
+      if (message) {
+        elements.loadingMessage.textContent = message;
+      }
+    }
+
+    function showError(message) {
+      elements.errorMessage.textContent = message || 'Tente novamente.';
+      elements.errorNotice.hidden = false;
+      window.setTimeout(function () {
+        elements.errorNotice.hidden = true;
+      }, 7000);
+    }
+
+    function showSuccess(message) {
+      elements.successMessage.textContent = message || 'A base foi atualizada.';
+      elements.successNotice.hidden = false;
+      window.setTimeout(function () {
+        elements.successNotice.hidden = true;
+      }, 5000);
+    }
+
+    function applyFormErrors(details) {
+      if (!details) {
+        return;
+      }
+      elements.formSummary.hidden = false;
+      Object.keys(details).forEach(function (fieldName) {
+        var field = elements.form.elements.namedItem(fieldName);
+        var message = elements.form.querySelector(
+          '[data-field-error="' + fieldName + '"]'
+        );
+        if (field) {
+          field.setAttribute('aria-invalid', 'true');
+        }
+        if (message) {
+          message.textContent = details[fieldName];
+        }
+      });
+    }
+
+    function clearFormErrors() {
+      elements.formSummary.hidden = true;
+      elements.form.querySelectorAll('[aria-invalid="true"]').forEach(function (field) {
+        field.removeAttribute('aria-invalid');
+      });
+      elements.form.querySelectorAll('[data-field-error]').forEach(function (message) {
+        message.textContent = '';
+      });
+    }
+
+    function applyEntityFormErrors(form, summary, attribute, details) {
+      if (!details) {
+        return;
+      }
+      summary.hidden = false;
+      Object.keys(details).forEach(function (fieldName) {
+        var field = form.elements.namedItem(fieldName);
+        var message = form.querySelector(
+          '[' + attribute + '="' + fieldName + '"]'
+        );
+        if (field) {
+          field.setAttribute('aria-invalid', 'true');
+        }
+        if (message) {
+          message.textContent = details[fieldName];
+        }
+      });
+    }
+
+    function clearEntityFormErrors(form, summary, attribute) {
+      summary.hidden = true;
+      form.querySelectorAll('[aria-invalid="true"]').forEach(function (field) {
+        field.removeAttribute('aria-invalid');
+      });
+      form.querySelectorAll('[' + attribute + ']').forEach(function (message) {
+        message.textContent = '';
+      });
+    }
+
+    function formToObject(form) {
+      var result = {};
+      new FormData(form).forEach(function (value, key) {
+        result[key] = typeof value === 'string' ? value.trim() : value;
+      });
+      return result;
+    }
+
+    function populateForm(form, record) {
+      Object.keys(record || {}).forEach(function (key) {
+        var field = form.elements.namedItem(key);
+        if (field && record[key] !== null && typeof record[key] !== 'undefined') {
+          if (field.tagName === 'SELECT' && typeof record[key] === 'boolean') {
+            field.value = String(record[key]);
+          } else {
+            field.value = record[key];
+          }
+        }
+      });
+    }
+
+    function findAluno(id) {
+      return state.alunos.find(function (aluno) {
+        return String(aluno.id) === String(id);
+      });
+    }
+
+    function findById(records, id) {
+      return (records || []).find(function (record) {
+        return String(record.id) === String(id);
+      }) || null;
+    }
+
+    function showDialog(dialog) {
+      if (typeof dialog.showModal === 'function') {
+        dialog.showModal();
+      } else {
+        dialog.setAttribute('open', 'open');
+      }
+    }
+
+    function closeDialog(dialog) {
+      if (typeof dialog.close === 'function') {
+        dialog.close();
+      } else {
+        dialog.removeAttribute('open');
+      }
+    }
+
+    function toggleSidebar() {
+      var isOpen = elements.sidebar.classList.toggle('is-open');
+      elements.sidebarToggle.setAttribute('aria-expanded', String(isOpen));
+      elements.sidebarBackdrop.hidden = !isOpen;
+    }
+
+    function closeSidebar() {
+      elements.sidebar.classList.remove('is-open');
+      elements.sidebarToggle.setAttribute('aria-expanded', 'false');
+      elements.sidebarBackdrop.hidden = true;
+    }
+
+    function formatScore(value) {
+      var number = Number(value);
+      return isFinite(number) ? number.toLocaleString('pt-BR', {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1
+      }) : '--';
+    }
+
+    function formatPercent(value) {
+      var number = Number(value);
+      return isFinite(number) ? number.toLocaleString('pt-BR', {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1
+      }) + '%' : '--';
+    }
+
+    function formatCompactNumber(value) {
+      var number = Number(value);
+      return isFinite(number)
+        ? number.toLocaleString('pt-BR', {
+          minimumFractionDigits: Number.isInteger(number) ? 0 : 1,
+          maximumFractionDigits: 1
+        })
+        : '--';
+    }
+
+    function toBoolean(value) {
+      return value === true ||
+        value === 1 ||
+        String(value || '').toLowerCase() === 'true' ||
+        String(value || '').toLowerCase() === 'sim';
+    }
+
+    function setText(id, value) {
+      document.getElementById(id).textContent = value;
+    }
+
+    function escapeHtml(value) {
+      return String(value === null || typeof value === 'undefined' ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+  })();
+</script>
+
+<script>
+/* codex-school-community-ux-script: pequenos ajustes de contexto escolar */
+(function() {
+  if (window.__codexSchoolCommunityUx) return;
+  window.__codexSchoolCommunityUx = true;
+
+  function ready(fn) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn, { once: true });
+    else fn();
+  }
+
+  ready(function() {
+    document.documentElement.setAttribute('data-community-context', 'school');
+
+    document.querySelectorAll('form').forEach(function(form) {
+      if (!form.getAttribute('aria-label') && !form.getAttribute('aria-labelledby')) {
+        form.setAttribute('aria-label', 'Formulario da comunidade escolar');
+      }
+    });
+
+    document.querySelectorAll('input, select, textarea').forEach(function(field) {
+      if (!field.id && field.name) field.id = 'field-' + String(field.name).replace(/[^a-zA-Z0-9_-]/g, '-');
+      if (field.required && !field.getAttribute('aria-required')) field.setAttribute('aria-required', 'true');
+      if (!field.getAttribute('autocomplete')) {
+        var type = (field.getAttribute('type') || '').toLowerCase();
+        var name = (field.getAttribute('name') || field.id || '').toLowerCase();
+        if (type === 'email' || name.indexOf('email') >= 0) field.setAttribute('autocomplete', 'email');
+        else if (name.indexOf('nome') >= 0 || name.indexOf('name') >= 0) field.setAttribute('autocomplete', 'name');
+        else if (name.indexOf('senha') >= 0 || name.indexOf('password') >= 0) field.setAttribute('autocomplete', 'current-password');
+      }
+    });
+
+    document.querySelectorAll('button:not([type])').forEach(function(button) {
+      button.setAttribute('type', 'button');
+    });
+  });
+})();
+</script>
+
+<script>
+/* codex-project-behavior-standardization: microcomportamentos compartilhados */
+(function() {
+  if (window.__codexProjectBehaviorStandardization) return;
+  window.__codexProjectBehaviorStandardization = true;
+
+  var SUBMIT_LOCK_MS = 2500;
+  var invalidFocusPending = false;
+
+  function isElement(value) {
+    return value && value.nodeType === 1;
+  }
+
+  function prefersReducedMotion() {
+    return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  function unlockForm(form, button) {
+    if (isElement(form)) {
+      delete form.dataset.codexSubmitting;
+      if (form.getAttribute('aria-busy') === 'true') form.setAttribute('aria-busy', 'false');
+    }
+
+    if (isElement(button) && button.dataset.codexSubmitLocked === 'true') {
+      delete button.dataset.codexSubmitLocked;
+      button.disabled = false;
+      button.removeAttribute('aria-disabled');
+    }
+  }
+
+  function restoreSubmitLocks(scope) {
+    var root = scope && scope.querySelectorAll ? scope : document;
+
+    root.querySelectorAll('form[data-codex-submitting="true"]').forEach(function(form) {
+      unlockForm(form);
+    });
+
+    root.querySelectorAll('[data-codex-submit-locked="true"]').forEach(function(button) {
+      unlockForm(null, button);
+    });
+  }
+
+  document.addEventListener('submit', function(event) {
+    var form = event.target;
+    if (!isElement(form) || String(form.tagName).toLowerCase() !== 'form') return;
+    if (form.hasAttribute('data-no-submit-lock')) return;
+
+    if (form.dataset.codexSubmitting === 'true') {
+      event.preventDefault();
+      return;
+    }
+
+    if (typeof form.checkValidity === 'function' && !form.checkValidity()) return;
+
+    form.dataset.codexSubmitting = 'true';
+    form.setAttribute('aria-busy', 'true');
+
+    var button = event.submitter || form.querySelector('button[type="submit"], input[type="submit"], button:not([type])');
+    if (isElement(button) && !button.disabled && !button.hasAttribute('data-no-submit-lock')) {
+      button.dataset.codexSubmitLocked = 'true';
+      button.disabled = true;
+      button.setAttribute('aria-disabled', 'true');
+    }
+
+    window.setTimeout(function() {
+      unlockForm(form, button);
+    }, SUBMIT_LOCK_MS);
+  }, true);
+
+  document.addEventListener('invalid', function(event) {
+    var field = event.target;
+    if (!isElement(field) || invalidFocusPending) return;
+    invalidFocusPending = true;
+
+    window.setTimeout(function() {
+      invalidFocusPending = false;
+      if (!document.documentElement.contains(field)) return;
+      try {
+        field.scrollIntoView({ block: 'center', inline: 'nearest', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+        field.focus({ preventScroll: true });
+      } catch (error) {
+        field.focus();
+      }
+    }, 0);
+  }, true);
+
+  document.addEventListener('keydown', function(event) {
+    if (event.key !== 'Escape') return;
+    var closedSomething = false;
+
+    var dialogs = Array.prototype.slice.call(document.querySelectorAll('dialog[open]'));
+    var dialog = dialogs[dialogs.length - 1];
+    if (dialog && typeof dialog.close === 'function') {
+      dialog.close();
+      closedSomething = true;
+    }
+
+    if (!closedSomething) {
+      var details = Array.prototype.slice.call(document.querySelectorAll('details[open]'));
+      var detail = details[details.length - 1];
+      if (detail) {
+        detail.removeAttribute('open');
+        closedSomething = true;
+      }
+    }
+
+    document.querySelectorAll('[aria-expanded="true"]').forEach(function(toggle) {
+      toggle.setAttribute('aria-expanded', 'false');
+      closedSomething = true;
+    });
+
+    if (closedSomething) event.preventDefault();
+  }, true);
+
+  window.addEventListener('pageshow', function() {
+    restoreSubmitLocks(document);
+  });
+
+  document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible') restoreSubmitLocks(document);
+  });
+})();
+</script>
+
+
+
+
+<script>
+// ================================
+// DASHBOARD ENHANCEMENTS
+// ================================
+(function() {
+  'use strict';
+  
+  // Atualiza o horário da última sincronização
+  function updateLastSyncTime() {
+    var element = document.getElementById('last-sync-time');
+    if (!element) return;
+    
+    var now = new Date();
+    var hours = String(now.getHours()).padStart(2, '0');
+    var minutes = String(now.getMinutes()).padStart(2, '0');
+    element.textContent = hours + ':' + minutes;
+  }
+  
+  // Atualiza a métrica de análises (caso não exista)
+  function initializeAnalysisMetric() {
+    var metricElement = document.getElementById('metric-analises');
+    if (metricElement && metricElement.textContent === '0') {
+      // Mantém em 0 até que dados reais sejam carregados
+      metricElement.textContent = '0';
+    }
+  }
+  
+  // Adiciona animação suave aos cards de métrica ao carregar
+  function animateMetricCards() {
+    var cards = document.querySelectorAll('.metric-card');
+    cards.forEach(function(card, index) {
+      card.style.opacity = '0';
+      card.style.transform = 'translateY(20px)';
+      
+      setTimeout(function() {
+        card.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+        card.style.opacity = '1';
+        card.style.transform = 'translateY(0)';
+      }, 100 * index);
+    });
+  }
+  
+  // Smooth scroll para links âncora
+  function initializeSmoothScroll() {
+    document.querySelectorAll('a[href^="#"]').forEach(function(anchor) {
+      anchor.addEventListener('click', function (e) {
+        var targetId = this.getAttribute('href');
+        if (targetId === '#') return;
+        
+        var target = document.querySelector(targetId);
+        if (target) {
+          e.preventDefault();
+          target.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start'
+          });
+        }
+      });
+    });
+  }
+  
+  // Adiciona tooltip simples aos ícones
+  function initializeTooltips() {
+    document.querySelectorAll('[aria-label]').forEach(function(element) {
+      var label = element.getAttribute('aria-label');
+      if (!label || element.title) return;
+      element.title = label;
+    });
+  }
+  
+  // Inicialização
+  function initialize() {
+    updateLastSyncTime();
+    initializeAnalysisMetric();
+    initializeSmoothScroll();
+    initializeTooltips();
+    
+    // Aguarda um pouco antes de animar para garantir que o DOM esteja pronto
+    setTimeout(animateMetricCards, 300);
+    
+    // Atualiza o tempo a cada minuto
+    setInterval(updateLastSyncTime, 60000);
+  }
+  
+  // Executa quando o DOM estiver pronto
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initialize);
+  } else {
+    initialize();
+  }
+  
+  // Exporta funções para uso externo se necessário
+  window.DashboardEnhancements = {
+    updateLastSyncTime: updateLastSyncTime,
+    animateMetricCards: animateMetricCards
+  };
+})();
+</script>

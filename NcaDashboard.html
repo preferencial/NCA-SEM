@@ -1,0 +1,546 @@
+<!--
+ ==================================================================================================
+ COMPONENTE: NcaDashboard.html
+ PROJETO: Integração GAS-Colab para NCA-SEM Educacional
+ 
+ DESCRIÇÃO:
+   Painel específico para visualização de gargalos e linhas de teto.
+ 
+ INTEGRAÇÕES:
+   - Comunicação via google.script.run com o backend GAS.
+   - Renderização de dados provenientes da Google Planilha.
+   - Exibição de resultados analíticos gerados pelo Python/Colab.
+ ==================================================================================================
+-->
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <base target="_top">
+  
+
+
+
+
+
+
+<script id="up-oracular-form-feedback">
+(function () {
+  'use strict';
+  if (window.UpOracularFeedback) return;
+
+  var timer = null;
+  function notify(kind, message) {
+    var box = document.getElementById('uo-feedback-box');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'uo-feedback-box';
+      box.className = 'uo-feedback-box';
+      box.setAttribute('role', 'status');
+      box.setAttribute('aria-live', 'polite');
+      document.body.appendChild(box);
+    }
+    box.dataset.kind = kind === 'err' ? 'err' : 'ok';
+    box.textContent = String(message || (kind === 'err' ? 'Nao foi possivel concluir.' : 'Operacao concluida.'));
+    box.classList.add('is-visible');
+    clearTimeout(timer);
+    timer = setTimeout(function () {
+      box.classList.remove('is-visible');
+    }, 1000);
+  }
+
+  function connectLabels(form) {
+    form.querySelectorAll('input:not([type="hidden"]), select, textarea').forEach(function (field, index) {
+      var id = field.id || ('uo-field-' + index + '-' + Math.random().toString(36).slice(2, 7));
+      field.id = id;
+      var label = form.querySelector('label[for="' + id + '"]');
+      if (!label) {
+        var sibling = field.previousElementSibling;
+        if (sibling && sibling.tagName === 'LABEL') {
+          sibling.htmlFor = id;
+          label = sibling;
+        }
+      }
+      if (label && field.parentElement && !field.parentElement.classList.contains('uo-field')) {
+        field.parentElement.classList.add('uo-field');
+      }
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('form').forEach(connectLabels);
+  });
+
+  document.addEventListener('submit', function (event) {
+    var form = event.target;
+    if (!form || form.tagName !== 'FORM') return;
+    form.setAttribute('aria-busy', 'true');
+    notify('ok', 'Enviando...');
+    window.setTimeout(function () {
+      if (form.getAttribute('aria-busy') === 'true') {
+        form.removeAttribute('aria-busy');
+      }
+    }, 10000);
+  }, true);
+
+  window.UpOracularFeedback = {
+    ok: function (message) { notify('ok', message); },
+    err: function (message) { notify('err', message); },
+    done: function (form, message) {
+      if (form) form.removeAttribute('aria-busy');
+      notify('ok', message);
+    },
+    fail: function (form, message) {
+      if (form) form.removeAttribute('aria-busy');
+      notify('err', message);
+    }
+  };
+}());
+</script>
+
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  
+  
+
+    <title>Página</title>
+  
+</head>
+<body>
+  <!-- Painel NCA/SEM: prontidão analítica + parecer via Gemini (AiInsightsService.gs) -->
+  <main class="nca-panel" aria-labelledby="nca-title">
+    <section class="nca-card">
+      <p class="nca-eyebrow"><i class="material-icons cdx-mi" aria-hidden="true">bar_chart</i> Prontidão analítica</p>
+      <h1 id="nca-title">Painel NCA / SEM</h1>
+      <p id="nca-status" role="status" aria-live="polite">Carregando a visão analítica...</p>
+
+      <div id="nca-summary" class="nca-grid" hidden></div>
+
+      <div id="nca-methods" hidden>
+        <h2><i class="material-icons cdx-mi" aria-hidden="true">science</i> Métodos</h2>
+        <div id="nca-methods-list" class="nca-grid"></div>
+      </div>
+
+      <div id="nca-priorities" hidden>
+        <h2><i class="material-icons cdx-mi" aria-hidden="true">flag</i> Prioridades</h2>
+        <ul id="nca-priorities-list"></ul>
+      </div>
+
+      <div class="nca-actions">
+        <button id="nca-ai-button" type="button"><i class="material-icons cdx-mi" aria-hidden="true">smart_toy</i> Gerar parecer com IA</button>
+      </div>
+      <div id="nca-ai" class="nca-parecer" hidden>
+        <h2><i class="material-icons cdx-mi" aria-hidden="true">smart_toy</i> Parecer analítico</h2>
+        <p id="nca-ai-text"></p>
+        <small id="nca-ai-source"></small>
+      </div>
+    </section>
+  </main>
+
+  <style>
+    .nca-panel { max-width: 960px; margin: 0 auto; padding: 16px; }
+    .nca-card {
+      border: 1px solid #dadce0; border-radius: 8px; padding: 20px;
+      background: #fff;
+    }
+    .nca-eyebrow { margin: 0 0 4px; color: #5f6368; }
+    .nca-grid {
+      display: grid; gap: 10px; margin: 12px 0;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    }
+    .nca-metric, .nca-method {
+      border: 1px solid #dadce0; border-radius: 8px; padding: 12px;
+    }
+    .nca-metric span { display: block; color: #5f6368; font-size: .9rem; }
+    .nca-metric strong { font-size: 1.4rem; }
+    .nca-method ul { margin: 8px 0 0; padding-left: 18px; }
+    .nca-method .ready { color: #188038; }
+    .nca-method .partial { color: #b06000; }
+    .nca-method .blocked { color: #c5221f; }
+    .nca-actions { margin-top: 14px; }
+    .nca-parecer {
+      margin-top: 14px; padding: 14px;
+      border: 1px solid #dadce0; border-left: 4px solid #1a73e8;
+      border-radius: 8px;
+    }
+  </style>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var statusEl = document.getElementById('nca-status');
+
+      function setNcaStatus(message) { statusEl.textContent = message || ''; }
+
+      function metric(label, value) {
+        var div = document.createElement('div');
+        div.className = 'nca-metric';
+        var span = document.createElement('span');
+        span.textContent = label;
+        var strong = document.createElement('strong');
+        strong.textContent = (value === null || value === undefined) ? '—' : value;
+        div.append(span, strong);
+        return div;
+      }
+
+      function renderOverview(overview) {
+        var summary = document.getElementById('nca-summary');
+        summary.replaceChildren(
+          metric('👩‍🎓 Alunos ativos', overview.summary.alunos),
+          metric('🏫 Escolas', overview.summary.escolas),
+          metric('👩‍🏫 Professores', overview.summary.professores),
+          metric('🧩 Cobertura média', overview.summary.averageCoverage + '%')
+        );
+        summary.hidden = false;
+
+        var methods = document.getElementById('nca-methods-list');
+        methods.replaceChildren();
+        (overview.methods || []).forEach(function (method) {
+          var card = document.createElement('div');
+          card.className = 'nca-method';
+          var title = document.createElement('strong');
+          title.textContent = method.label + ' — ';
+          var state = document.createElement('span');
+          state.className = method.status;
+          state.textContent = method.statusLabel;
+          title.appendChild(state);
+          var desc = document.createElement('p');
+          desc.textContent = method.description;
+          var list = document.createElement('ul');
+          (method.checks || []).forEach(function (check) {
+            var li = document.createElement('li');
+            li.textContent = (check.passed ? '✅ ' : '⬜ ') + check.label + ' (' + check.detail + ')';
+            list.appendChild(li);
+          });
+          card.append(title, desc, list);
+          methods.appendChild(card);
+        });
+        document.getElementById('nca-methods').hidden = false;
+
+        var priorities = document.getElementById('nca-priorities-list');
+        priorities.replaceChildren();
+        (overview.priorities || []).forEach(function (item) {
+          var li = document.createElement('li');
+          li.textContent = item;
+          priorities.appendChild(li);
+        });
+        document.getElementById('nca-priorities').hidden = (overview.priorities || []).length === 0;
+      }
+
+      // Envelope deste projeto e' { ok, data, error, meta } (ErrorHandling_execute).
+      function unwrapOk(res) {
+        if (res && res.ok) { return res.data; }
+        var message = res && res.error && res.error.message
+          ? res.error.message : 'Operacao nao concluida.';
+        throw new Error(message);
+      }
+
+      ClientCall.call('ApiEndpoints_getAnalysisOverview', [])
+        .then(function (res) {
+          renderOverview(unwrapOk(res));
+          setNcaStatus('');
+        })
+        .catch(function (error) {
+          setNcaStatus('Falha ao carregar: ' + error.message);
+        });
+
+      // Parecer via Gemini sobre os agregados dos estudantes; o backend degrada
+      // sozinho para um parecer local quando a IA nao esta configurada.
+      document.getElementById('nca-ai-button').addEventListener('click', function () {
+        var button = this;
+        button.disabled = true;
+        setNcaStatus('Gerando parecer analitico...');
+        ClientCall.call('ApiEndpoints_getAiInsights', [])
+          .then(function (res) {
+            var data = unwrapOk(res);
+            document.getElementById('nca-ai-text').textContent = data.parecer || '';
+            document.getElementById('nca-ai-source').textContent = data.source === 'gemini'
+              ? 'Parecer gerado pela IA (' + data.model + ') a partir de dados agregados.'
+              : 'Parecer gerado localmente (IA nao configurada).';
+            document.getElementById('nca-ai').hidden = false;
+            setNcaStatus('');
+          })
+          .catch(function (error) {
+            button.disabled = false;
+            setNcaStatus('Falha ao gerar o parecer: ' + error.message);
+          });
+      });
+    });
+  </script>
+
+<script>
+/* codex-school-community-ux-script: pequenos ajustes de contexto escolar */
+(function() {
+  if (window.__codexSchoolCommunityUx) return;
+  window.__codexSchoolCommunityUx = true;
+
+  function ready(fn) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn, { once: true });
+    else fn();
+  }
+
+  ready(function() {
+    document.documentElement.setAttribute('data-community-context', 'school');
+
+    document.querySelectorAll('form').forEach(function(form) {
+      if (!form.getAttribute('aria-label') && !form.getAttribute('aria-labelledby')) {
+        form.setAttribute('aria-label', 'Formulario da comunidade escolar');
+      }
+    });
+
+    document.querySelectorAll('input, select, textarea').forEach(function(field) {
+      if (!field.id && field.name) field.id = 'field-' + String(field.name).replace(/[^a-zA-Z0-9_-]/g, '-');
+      if (field.required && !field.getAttribute('aria-required')) field.setAttribute('aria-required', 'true');
+      if (!field.getAttribute('autocomplete')) {
+        var type = (field.getAttribute('type') || '').toLowerCase();
+        var name = (field.getAttribute('name') || field.id || '').toLowerCase();
+        if (type === 'email' || name.indexOf('email') >= 0) field.setAttribute('autocomplete', 'email');
+        else if (name.indexOf('nome') >= 0 || name.indexOf('name') >= 0) field.setAttribute('autocomplete', 'name');
+        else if (name.indexOf('senha') >= 0 || name.indexOf('password') >= 0) field.setAttribute('autocomplete', 'current-password');
+      }
+    });
+
+    document.querySelectorAll('button:not([type])').forEach(function(button) {
+      button.setAttribute('type', 'button');
+    });
+  });
+})();
+</script>
+
+<script>
+/* codex-project-behavior-standardization: microcomportamentos compartilhados */
+(function() {
+  if (window.__codexProjectBehaviorStandardization) return;
+  window.__codexProjectBehaviorStandardization = true;
+
+  var SUBMIT_LOCK_MS = 2500;
+  var invalidFocusPending = false;
+
+  function isElement(value) {
+    return value && value.nodeType === 1;
+  }
+
+  function prefersReducedMotion() {
+    return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  function unlockForm(form, button) {
+    if (isElement(form)) {
+      delete form.dataset.codexSubmitting;
+      if (form.getAttribute('aria-busy') === 'true') form.setAttribute('aria-busy', 'false');
+    }
+
+    if (isElement(button) && button.dataset.codexSubmitLocked === 'true') {
+      delete button.dataset.codexSubmitLocked;
+      button.disabled = false;
+      button.removeAttribute('aria-disabled');
+    }
+  }
+
+  function restoreSubmitLocks(scope) {
+    var root = scope && scope.querySelectorAll ? scope : document;
+
+    root.querySelectorAll('form[data-codex-submitting="true"]').forEach(function(form) {
+      unlockForm(form);
+    });
+
+    root.querySelectorAll('[data-codex-submit-locked="true"]').forEach(function(button) {
+      unlockForm(null, button);
+    });
+  }
+
+  document.addEventListener('submit', function(event) {
+    var form = event.target;
+    if (!isElement(form) || String(form.tagName).toLowerCase() !== 'form') return;
+    if (form.hasAttribute('data-no-submit-lock')) return;
+
+    if (form.dataset.codexSubmitting === 'true') {
+      event.preventDefault();
+      return;
+    }
+
+    if (typeof form.checkValidity === 'function' && !form.checkValidity()) return;
+
+    form.dataset.codexSubmitting = 'true';
+    form.setAttribute('aria-busy', 'true');
+
+    var button = event.submitter || form.querySelector('button[type="submit"], input[type="submit"], button:not([type])');
+    if (isElement(button) && !button.disabled && !button.hasAttribute('data-no-submit-lock')) {
+      button.dataset.codexSubmitLocked = 'true';
+      button.disabled = true;
+      button.setAttribute('aria-disabled', 'true');
+    }
+
+    window.setTimeout(function() {
+      unlockForm(form, button);
+    }, SUBMIT_LOCK_MS);
+  }, true);
+
+  document.addEventListener('invalid', function(event) {
+    var field = event.target;
+    if (!isElement(field) || invalidFocusPending) return;
+    invalidFocusPending = true;
+
+    window.setTimeout(function() {
+      invalidFocusPending = false;
+      if (!document.documentElement.contains(field)) return;
+      try {
+        field.scrollIntoView({ block: 'center', inline: 'nearest', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+        field.focus({ preventScroll: true });
+      } catch (error) {
+        field.focus();
+      }
+    }, 0);
+  }, true);
+
+  document.addEventListener('keydown', function(event) {
+    if (event.key !== 'Escape') return;
+    var closedSomething = false;
+
+    var dialogs = Array.prototype.slice.call(document.querySelectorAll('dialog[open]'));
+    var dialog = dialogs[dialogs.length - 1];
+    if (dialog && typeof dialog.close === 'function') {
+      dialog.close();
+      closedSomething = true;
+    }
+
+    if (!closedSomething) {
+      var details = Array.prototype.slice.call(document.querySelectorAll('details[open]'));
+      var detail = details[details.length - 1];
+      if (detail) {
+        detail.removeAttribute('open');
+        closedSomething = true;
+      }
+    }
+
+    document.querySelectorAll('[aria-expanded="true"]').forEach(function(toggle) {
+      toggle.setAttribute('aria-expanded', 'false');
+      closedSomething = true;
+    });
+
+    if (closedSomething) event.preventDefault();
+  }, true);
+
+  window.addEventListener('pageshow', function() {
+    restoreSubmitLocks(document);
+  });
+
+  document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible') restoreSubmitLocks(document);
+  });
+})();
+</script>
+  <?!= include("ClientCall"); ?>
+
+<!-- CODEX_NOTEBOOK_GRAPH_GALLERY_V1 -->
+<section class="codex-notebook-graphs" data-codex-notebook-graphs aria-live="polite">
+  
+  <div class="codex-notebook-graphs__header">
+    <h2 class="codex-notebook-graphs__title">Gráficos da análise (notebook)</h2>
+    <p class="codex-notebook-graphs__status" data-codex-graphs-status>Carregando gráficos...</p>
+  </div>
+  <div class="codex-notebook-graphs__grid" data-codex-graphs-grid></div>
+</section>
+<script>
+(function () {
+  var section = document.currentScript && document.currentScript.previousElementSibling;
+  if (!section || !section.matches('[data-codex-notebook-graphs]')) return;
+  var status = section.querySelector('[data-codex-graphs-status]');
+  var grid = section.querySelector('[data-codex-graphs-grid]');
+
+  var META = {
+    '01_overview_abas': { t: 'Visão geral por aba', d: 'Volume de registros em cada aba da planilha.' },
+    '02_distribuicoes_numericas': { t: 'Distribuições numéricas', d: 'Dispersão das principais métricas (boxplot).' },
+    '03_top_categorias': { t: 'Top categorias', d: 'Categorias mais frequentes na aba principal.' },
+    '04_serie_temporal': { t: 'Série temporal', d: 'Evolução dos registros ao longo do tempo.' }
+  };
+  function meta(name) {
+    var key = String(name || '').toLowerCase().replace(/\.(png|jpe?g)$/, '');
+    if (META[key]) return META[key];
+    var pretty = key.replace(/^\d+[_-]?/, '').replace(/[_-]+/g, ' ').trim();
+    pretty = pretty ? pretty.charAt(0).toUpperCase() + pretty.slice(1) : 'Gráfico';
+    return { t: pretty, d: '' };
+  }
+  function setStatus(text) { if (status) status.textContent = text; }
+
+  var lightbox, lightImg;
+  function close() { if (lightbox) lightbox.classList.remove('is-open'); }
+  function openLightbox(src, alt) {
+    if (!lightbox) {
+      lightbox = document.createElement('div');
+      lightbox.className = 'codex-notebook-graphs__lightbox';
+      var btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'codex-notebook-graphs__close';
+      btn.setAttribute('aria-label', 'Fechar'); btn.textContent = '\u00d7';
+      lightImg = document.createElement('img');
+      lightbox.appendChild(btn); lightbox.appendChild(lightImg);
+      document.body.appendChild(lightbox);
+      lightbox.addEventListener('click', function (e) { if (e.target === lightbox || e.target === btn) close(); });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+    }
+    lightImg.src = src; lightImg.alt = alt || '';
+    lightbox.classList.add('is-open');
+  }
+
+  function render(response) {
+    var images = response && response.images ? response.images : [];
+    grid.innerHTML = '';
+    if (!images.length) {
+      grid.innerHTML = '<div class="codex-notebook-graphs__empty">' +
+        (response && response.message ? (response.message + ' ') : '') +
+        'Ainda não há gráficos. Rode <code>populateSyntheticData()</code> e depois o ' +
+        '<code>notebook.py</code> no Colab (com <code>SPREADSHEETS_ID</code> e <code>FOLDER_ID</code>).</div>';
+      setStatus('Nenhum gráfico ainda.');
+      return;
+    }
+    images.forEach(function (image) {
+      var info = meta(image.name);
+      var figure = document.createElement('figure');
+      figure.className = 'codex-notebook-graphs__figure';
+      var btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'codex-notebook-graphs__btn'; btn.title = 'Ampliar';
+      var img = document.createElement('img');
+      img.loading = 'lazy'; img.decoding = 'async'; img.src = image.dataUrl; img.alt = info.t;
+      btn.appendChild(img);
+      btn.addEventListener('click', function () { openLightbox(image.dataUrl, info.t); });
+      var cap = document.createElement('figcaption');
+      cap.className = 'codex-notebook-graphs__cap';
+      var ct = document.createElement('div');
+      ct.className = 'codex-notebook-graphs__cap-title'; ct.textContent = info.t;
+      cap.appendChild(ct);
+      if (info.d) {
+        var cd = document.createElement('div');
+        cd.className = 'codex-notebook-graphs__cap-desc'; cd.textContent = info.d;
+        cap.appendChild(cd);
+      }
+      figure.appendChild(btn); figure.appendChild(cap);
+      grid.appendChild(figure);
+    });
+    setStatus(images.length + ' gráfico(s).');
+  }
+
+  if (!window.google || !google.script || !google.script.run) {
+    setStatus('Disponível apenas no Web App publicado.');
+    grid.innerHTML = '<div class="codex-notebook-graphs__empty">Os gráficos aparecem quando esta tela roda dentro do Web App publicado.</div>';
+    return;
+  }
+  google.script.run
+    .withSuccessHandler(render)
+    .withFailureHandler(function (error) {
+      setStatus(error && error.message ? error.message : 'Não foi possível carregar os gráficos.');
+    })
+    .getNotebookGraphImages({});
+}());
+</script>
+<!-- /CODEX_NOTEBOOK_GRAPH_GALLERY_V1 -->
+</body>
+</html>
+
+
+
+
+
+
+
+
+

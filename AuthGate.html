@@ -1,0 +1,159 @@
+
+<script id="up-oracular-form-feedback">
+(function () {
+  'use strict';
+  if (window.UpOracularFeedback) return;
+
+  var timer = null;
+  function notify(kind, message) {
+    var box = document.getElementById('uo-feedback-box');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'uo-feedback-box';
+      box.className = 'uo-feedback-box';
+      box.setAttribute('role', 'status');
+      box.setAttribute('aria-live', 'polite');
+      document.body.appendChild(box);
+    }
+    box.dataset.kind = kind === 'err' ? 'err' : 'ok';
+    box.textContent = String(message || (kind === 'err' ? 'Nao foi possivel concluir.' : 'Operacao concluida.'));
+    box.classList.add('is-visible');
+    clearTimeout(timer);
+    timer = setTimeout(function () {
+      box.classList.remove('is-visible');
+    }, 1000);
+  }
+
+  function connectLabels(form) {
+    form.querySelectorAll('input:not([type="hidden"]), select, textarea').forEach(function (field, index) {
+      var id = field.id || ('uo-field-' + index + '-' + Math.random().toString(36).slice(2, 7));
+      field.id = id;
+      var label = form.querySelector('label[for="' + id + '"]');
+      if (!label) {
+        var sibling = field.previousElementSibling;
+        if (sibling && sibling.tagName === 'LABEL') {
+          sibling.htmlFor = id;
+          label = sibling;
+        }
+      }
+      if (label && field.parentElement && !field.parentElement.classList.contains('uo-field')) {
+        field.parentElement.classList.add('uo-field');
+      }
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('form').forEach(connectLabels);
+  });
+
+  document.addEventListener('submit', function (event) {
+    var form = event.target;
+    if (!form || form.tagName !== 'FORM') return;
+    form.setAttribute('aria-busy', 'true');
+    notify('ok', 'Enviando...');
+    window.setTimeout(function () {
+      if (form.getAttribute('aria-busy') === 'true') {
+        form.removeAttribute('aria-busy');
+      }
+    }, 10000);
+  }, true);
+
+  window.UpOracularFeedback = {
+    ok: function (message) { notify('ok', message); },
+    err: function (message) { notify('err', message); },
+    done: function (form, message) {
+      if (form) form.removeAttribute('aria-busy');
+      notify('ok', message);
+    },
+    fail: function (form, message) {
+      if (form) form.removeAttribute('aria-busy');
+      notify('err', message);
+    }
+  };
+}());
+</script>
+
+<style>
+  .auth-gate {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: #15171c;
+    color: #eef1f5;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9999;
+  }
+  .auth-gate[hidden],
+  .auth-gate.hidden,
+  .auth-gate[style*="display: none"],
+  .auth-gate[data-hidden="true"] { 
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+  .auth-card {
+    width: min(100%, 420px);
+    padding: 28px;
+    border: 1px solid #343941;
+    border-radius: 12px;
+    background: #20242b;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.32);
+  }
+  .auth-card h1 { margin: 0 0 8px; font-size: 1.65rem; }
+  .auth-card p { margin: 0 0 22px; color: #c8ced8; }
+  .auth-field { display: grid; gap: 7px; margin-bottom: 16px; }
+  .auth-field label { font-weight: 700; }
+  .auth-field input {
+    width: 100%;
+    min-height: 46px;
+    padding: 10px 12px;
+    border: 1px solid #4a5260;
+    border-radius: 7px;
+    background: #15171c;
+    color: #eef1f5;
+    font: inherit;
+  }
+  .auth-submit {
+    width: 100%;
+    min-height: 46px;
+    border: 1px solid #8ab4f8;
+    border-radius: 7px;
+    background: #1a73e8;
+    color: #fff;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .auth-submit:disabled { opacity: 0.65; cursor: wait; }
+  .auth-error {
+    margin-top: 14px;
+    color: #f6aea9;
+    font-weight: 600;
+  }
+</style>
+
+<section id="auth-gate" class="auth-gate hidden" aria-labelledby="auth-title" hidden data-hidden="true" style="display: none !important;">
+  <form id="auth-form" class="auth-card" onsubmit="event.preventDefault();">
+    <h1 id="auth-title">NCA-SEM Educacional</h1>
+    <p>Entre com seu usuario para acessar os dados da comunidade escolar.</p>
+    <div class="auth-field">
+      <label for="auth-username">Usuario ou e-mail</label>
+      <input inputmode="text" id="auth-username" name="username" autocomplete="username" required>
+    </div>
+    <div class="auth-field">
+      <label for="auth-password">Senha</label>
+      <input inputmode="text" id="auth-password" name="password" type="password" autocomplete="current-password" required>
+    </div>
+    <button id="auth-submit" class="auth-submit" type="submit">Entrar</button>
+    <div id="auth-error" class="auth-error" role="alert" aria-live="polite"></div>
+  </form>
+</section>
+
+
+

@@ -1,0 +1,639 @@
+<!--
+ ==================================================================================================
+ COMPONENTE: SemDashboard.html
+ PROJETO: Integração GAS-Colab para NCA-SEM Educacional
+ 
+ DESCRIÇÃO:
+   Painel para visualização de diagramas de caminhos e coeficientes SEM.
+   Exibe coeficientes de caminho, cargas fatoriais e diagrama de caminhos SVG
+   a partir dos resultados escritos pelo notebook.py na aba Resultados_Analise.
+ 
+ ⚠️ CONSTRUCTOS LATENTES ESPECIFICADOS (fundamentos.md 3.5.5.4):
+   Interface explicita que constructos latentes do SEM são os ESPECIFICADOS NO MODELO,
+   NÃO são "fatores descobertos automaticamente".
+   
+   GARANTIAS IMPLEMENTADAS:
+   1. Nota informativa destacada na seção "Cargas Fatoriais"
+   2. Texto explica: "constructos são especificados, não descobertos"
+   3. Aviso metodológico final reforça: "constructos latentes são os especificados no modelo"
+   4. Diagrama SVG: rótulo "(latente)" para diferenciar de variáveis observadas
+   5. Background conceitual: SEM testa relações entre constructos PRÉ-DEFINIDOS
+ 
+ INTEGRAÇÕES:
+   - Comunicação via google.script.run com o backend GAS.
+   - Renderização de dados provenientes da Google Planilha.
+   - Exibição de resultados analíticos gerados pelo Python/Colab.
+ ==================================================================================================
+-->
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <base target="_top">
+  
+
+
+
+
+
+
+<script id="up-oracular-form-feedback">
+(function () {
+  'use strict';
+  if (window.UpOracularFeedback) return;
+
+  var timer = null;
+  function notify(kind, message) {
+    var box = document.getElementById('uo-feedback-box');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'uo-feedback-box';
+      box.className = 'uo-feedback-box';
+      box.setAttribute('role', 'status');
+      box.setAttribute('aria-live', 'polite');
+      document.body.appendChild(box);
+    }
+    box.dataset.kind = kind === 'err' ? 'err' : 'ok';
+    box.textContent = String(message || (kind === 'err' ? 'Nao foi possivel concluir.' : 'Operacao concluida.'));
+    box.classList.add('is-visible');
+    clearTimeout(timer);
+    timer = setTimeout(function () {
+      box.classList.remove('is-visible');
+    }, 1000);
+  }
+
+  function connectLabels(form) {
+    form.querySelectorAll('input:not([type="hidden"]), select, textarea').forEach(function (field, index) {
+      var id = field.id || ('uo-field-' + index + '-' + Math.random().toString(36).slice(2, 7));
+      field.id = id;
+      var label = form.querySelector('label[for="' + id + '"]');
+      if (!label) {
+        var sibling = field.previousElementSibling;
+        if (sibling && sibling.tagName === 'LABEL') {
+          sibling.htmlFor = id;
+          label = sibling;
+        }
+      }
+      if (label && field.parentElement && !field.parentElement.classList.contains('uo-field')) {
+        field.parentElement.classList.add('uo-field');
+      }
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('form').forEach(connectLabels);
+  });
+
+  document.addEventListener('submit', function (event) {
+    var form = event.target;
+    if (!form || form.tagName !== 'FORM') return;
+    form.setAttribute('aria-busy', 'true');
+    notify('ok', 'Enviando...');
+    window.setTimeout(function () {
+      if (form.getAttribute('aria-busy') === 'true') {
+        form.removeAttribute('aria-busy');
+      }
+    }, 10000);
+  }, true);
+
+  window.UpOracularFeedback = {
+    ok: function (message) { notify('ok', message); },
+    err: function (message) { notify('err', message); },
+    done: function (form, message) {
+      if (form) form.removeAttribute('aria-busy');
+      notify('ok', message);
+    },
+    fail: function (form, message) {
+      if (form) form.removeAttribute('aria-busy');
+      notify('err', message);
+    }
+  };
+}());
+</script>
+
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  
+  
+
+    <title>Página</title>
+  
+</head>
+<body>
+  <!-- Painel SEM: diagrama de caminhos, coeficientes e cargas fatoriais -->
+  <main class="sem-panel" id="sem-panel" aria-labelledby="sem-title" aria-busy="true">
+
+    <section class="sem-card">
+      <p class="sem-eyebrow"><i class="material-icons cdx-mi" aria-hidden="true">square_foot</i> Structural Equation Modeling</p>
+      <h1 id="sem-title">Painel SEM</h1>
+      <p id="sem-status" role="status" aria-live="polite">Carregando resultados do modelo SEM...</p>
+      <div class="sem-actions">
+        <button id="sem-dispatch-btn" type="button"><i class="material-icons cdx-mi" aria-hidden="true">play_arrow</i> Executar análise (notebook.py)</button>
+        <button id="sem-refresh-btn" type="button" class="secondary">↻ Atualizar resultados</button>
+      </div>
+      <p id="sem-dispatch-status" class="sem-muted" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="sem-card" id="sem-diagram-section" hidden aria-labelledby="sem-diagram-heading">
+      <h2 id="sem-diagram-heading"><i class="material-icons cdx-mi" aria-hidden="true">link</i> Diagrama de Caminhos</h2>
+      <p class="sem-muted">Modelo: <strong>Desempenho</strong> =~ Nota Matemática + Nota Português &nbsp;|&nbsp; Desempenho ~ Renda Familiar + Frequência</p>
+      <div class="sem-diagram-wrap" aria-label="Diagrama de caminhos SEM" role="img">
+        <svg id="sem-svg" viewBox="0 0 640 300" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+          <defs>
+            <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+              <polygon points="0 0,10 3.5,0 7" fill="#8ab4f8" />
+            </marker>
+          </defs>
+          <rect x="20"  y="110" width="130" height="40" rx="6" class="sem-box-obs" />
+          <text x="85"  y="135" class="sem-label">Renda Familiar</text>
+          <rect x="20"  y="170" width="130" height="40" rx="6" class="sem-box-obs" />
+          <text x="85"  y="195" class="sem-label">Frequência (%)</text>
+          <ellipse cx="320" cy="150" rx="80" ry="44" class="sem-box-lat" />
+          <text x="320" y="145" class="sem-label-lat">Desempenho</text>
+          <text x="320" y="162" class="sem-label-lat sem-label-sub">(latente)</text>
+          <rect x="490" y="90"  width="130" height="40" rx="6" class="sem-box-obs" />
+          <text x="555" y="115" class="sem-label">Nota Matemática</text>
+          <rect x="490" y="170" width="130" height="40" rx="6" class="sem-box-obs" />
+          <text x="555" y="195" class="sem-label">Nota Português</text>
+          <line x1="150" y1="130" x2="237" y2="147" class="sem-arrow" marker-end="url(#arrow)" />
+          <line x1="150" y1="190" x2="237" y2="163" class="sem-arrow" marker-end="url(#arrow)" />
+          <line x1="400" y1="136" x2="488" y2="113" class="sem-arrow" marker-end="url(#arrow)" />
+          <line x1="400" y1="164" x2="488" y2="187" class="sem-arrow" marker-end="url(#arrow)" />
+          <text id="svg-path-renda" x="185" y="132" class="sem-coef"></text>
+          <text id="svg-path-freq"  x="185" y="186" class="sem-coef"></text>
+          <text id="svg-load-mat"   x="440" y="118" class="sem-coef"></text>
+          <text id="svg-load-por"   x="440" y="185" class="sem-coef"></text>
+        </svg>
+      </div>
+    </section>
+
+    <section class="sem-card" id="sem-path-section" hidden aria-labelledby="sem-path-heading">
+      <h2 id="sem-path-heading">➡ Coeficientes de Caminho</h2>
+      <div class="sem-table-wrap">
+        <table id="sem-path-table" class="sem-table">
+          <thead><tr>
+            <th scope="col">Preditor</th>
+            <th scope="col">Resultado</th>
+            <th scope="col">Estimativa</th>
+            <th scope="col">Interpretação</th>
+          </tr></thead>
+          <tbody id="sem-path-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="sem-card" id="sem-load-section" hidden aria-labelledby="sem-load-heading">
+      <h2 id="sem-load-heading"><i class="material-icons cdx-mi" aria-hidden="true">sync</i> Cargas Fatoriais</h2>
+      <p class="sem-construct-note">
+        <i class="material-icons cdx-mi" aria-hidden="true" style="font-size: 16px; vertical-align: middle;">info</i>
+        <strong>Constructos latentes são especificados no modelo</strong> (Desempenho, Engajamento, etc.), 
+        não são fatores descobertos automaticamente. O SEM testa relações entre constructos previamente definidos 
+        pela equipe, não identifica fatores ocultos nos dados.
+      </p>
+      <div class="sem-table-wrap">
+        <table id="sem-load-table" class="sem-table">
+          <thead><tr>
+            <th scope="col">Constructo</th>
+            <th scope="col">Indicador</th>
+            <th scope="col">Carga</th>
+          </tr></thead>
+          <tbody id="sem-load-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="sem-card sem-disclaimer" aria-label="Aviso metodológico">
+      <p><i class="material-icons cdx-mi" aria-hidden="true">warning</i> <strong>Resultados indicativos.</strong> Validação estatística completa (índices de ajuste, poder, revisão humana) deve preceder qualquer decisão pedagógica. <strong>Constructos latentes são os especificados no modelo, não fatores descobertos automaticamente.</strong> Coeficientes estruturais são padrões do modelo, não mecanismos causais comprovados.</p>
+    </section>
+  </main>
+
+  <style>
+    .sem-panel { max-width: 960px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+    .sem-card { border: 1px solid var(--codex-gentle-border,#343941); border-radius: 10px; padding: 20px; background: var(--codex-gentle-surface,#20242b); }
+    .sem-eyebrow { margin: 0 0 4px; font-size: .85rem; color: var(--codex-gentle-muted,#c8ced8); }
+    .sem-muted   { color: var(--codex-gentle-muted,#c8ced8); font-size: .9rem; margin: 6px 0 0; }
+    .sem-construct-note { 
+      background: rgba(138,180,248,.08); 
+      border-left: 3px solid #8ab4f8; 
+      padding: 12px; 
+      margin: 10px 0; 
+      font-size: .875rem; 
+      line-height: 1.5; 
+      border-radius: 4px;
+    }
+    .sem-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .sem-diagram-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    #sem-svg { width: 100%; max-width: 640px; display: block; margin: 12px auto; }
+    .sem-box-obs { fill: var(--codex-gentle-surface-2,#272b33); stroke: var(--codex-gentle-border,#343941); stroke-width: 1.5; }
+    .sem-box-lat { fill: rgba(138,180,248,.12); stroke: #8ab4f8; stroke-width: 1.5; }
+    .sem-arrow   { stroke: #8ab4f8; stroke-width: 1.5; fill: none; }
+    .sem-label     { text-anchor: middle; font-size: 11px; fill: var(--codex-gentle-text,#eef1f5); font-family: system-ui,sans-serif; }
+    .sem-label-lat { text-anchor: middle; font-size: 12px; font-weight: 700; fill: #aecbfa; font-family: system-ui,sans-serif; }
+    .sem-label-sub { font-size: 10px; font-weight: 400; }
+    .sem-coef      { text-anchor: middle; font-size: 11px; fill: #9be7c1; font-family: system-ui,sans-serif; font-weight: 700; }
+    .sem-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 10px; }
+    .sem-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+    .sem-table th, .sem-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--codex-gentle-border,#343941); }
+    .sem-table th { font-weight: 700; color: var(--codex-gentle-muted,#c8ced8); }
+    .sem-table tr:last-child td { border-bottom: none; }
+    .sem-coef-pos { color: #9be7c1; }
+    .sem-coef-neg { color: #f28b82; }
+    .sem-disclaimer { border-left: 4px solid #f9a825; }
+    .sem-disclaimer p { margin: 0; font-size: .875rem; }
+    .sem-status-pronto { color: #9be7c1; }
+    .sem-status-bloq   { color: #f28b82; }
+    @media (max-width: 480px) {
+      .sem-actions { flex-direction: column; }
+      .sem-actions button { width: 100%; }
+    }
+  </style>
+
+  <script>
+    (function () {
+      'use strict';
+      var statusEl = document.getElementById('sem-status');
+      var dispatchEl = document.getElementById('sem-dispatch-status');
+      var resultsRequestSerial = 0;
+
+      function setStatus(msg, cls) { statusEl.textContent = msg || ''; statusEl.className = cls || ''; }
+      function setDispatch(msg, cls) { dispatchEl.textContent = msg || ''; dispatchEl.className = 'sem-muted ' + (cls || ''); }
+
+      function unwrapOk(res) {
+        if (res && res.ok) return res.data;
+        throw new Error(res && res.error && res.error.message ? res.error.message : 'Operação não concluída.');
+      }
+
+      function renderPath(coefficients) {
+        var tbody = document.getElementById('sem-path-body');
+        tbody.replaceChildren();
+        (coefficients || []).forEach(function (c) {
+          var row = tbody.insertRow();
+          row.insertCell().textContent = c.preditorLabel  || c.preditor  || '—';
+          row.insertCell().textContent = c.resultadoLabel || c.resultado || '—';
+          var estCell = row.insertCell();
+          var est = c.estimativa;
+          estCell.textContent = (est !== null && est !== undefined) ? est : '—';
+          estCell.className = est > 0 ? 'sem-coef-pos' : (est < 0 ? 'sem-coef-neg' : '');
+          row.insertCell().textContent = c.interpretacao || '—';
+          var id = c.preditor === 'rendaFamiliar' ? 'svg-path-renda'
+                 : c.preditor === 'frequencia'    ? 'svg-path-freq' : null;
+          if (id) document.getElementById(id).textContent = est !== null ? String(est) : '';
+        });
+        if ((coefficients || []).length) document.getElementById('sem-path-section').hidden = false;
+      }
+
+      function renderLoadings(loadings) {
+        var tbody = document.getElementById('sem-load-body');
+        tbody.replaceChildren();
+        (loadings || []).forEach(function (f) {
+          var row = tbody.insertRow();
+          row.insertCell().textContent = f.constructoLabel || f.constructo || '—';
+          row.insertCell().textContent = f.indicadorLabel  || f.indicador  || '—';
+          var cargaCell = row.insertCell();
+          var c = f.carga;
+          cargaCell.textContent = (c !== null && c !== undefined) ? c : '—';
+          cargaCell.className = c > 0 ? 'sem-coef-pos' : (c < 0 ? 'sem-coef-neg' : '');
+          var id = f.indicador === 'notaMatematica' ? 'svg-load-mat'
+                 : f.indicador === 'notaPortugues'  ? 'svg-load-por' : null;
+          if (id) document.getElementById(id).textContent = c !== null ? String(c) : '';
+        });
+        if ((loadings || []).length) document.getElementById('sem-load-section').hidden = false;
+      }
+
+      function renderReport(data) {
+        var sem = data.sem || {};
+        if (sem.status === 'bloqueado') { setStatus('⚠️ ' + (sem.mensagem || 'Amostra insuficiente.'), 'sem-status-bloq'); return; }
+        if (sem.status === 'sem_dados') { setStatus('Sem resultados SEM. Execute o notebook.py para gerar a análise.', ''); return; }
+        setStatus('✅ Resultados disponíveis — gerado em ' + (sem.generatedAt || data.generatedAt || '—'), 'sem-status-pronto');
+        document.getElementById('sem-diagram-section').hidden = false;
+        renderPath(sem.pathCoefficients || []);
+        renderLoadings(sem.factorLoadings || []);
+      }
+
+      function loadResults() {
+        var requestSerial = ++resultsRequestSerial;
+        var panel = document.getElementById('sem-panel');
+        if (panel) panel.setAttribute('aria-busy', 'true');
+        setStatus('Carregando resultados do modelo SEM...');
+        return ClientCall.call('ApiEndpoints_getAnalysisReport', [])
+          .then(function (res) {
+            if (requestSerial !== resultsRequestSerial) return;
+            renderReport(unwrapOk(res));
+          })
+          .catch(function (err) {
+            if (requestSerial !== resultsRequestSerial) return;
+            console.error('NCA-SEM: falha ao carregar resultados', err);
+            setStatus('Não foi possível carregar os resultados agora. Tente novamente.', 'sem-status-bloq');
+          })
+          .then(function () {
+            if (panel && requestSerial === resultsRequestSerial) panel.setAttribute('aria-busy', 'false');
+          });
+      }
+
+      document.getElementById('sem-dispatch-btn').addEventListener('click', function () {
+        var btn = this;
+        if (btn.disabled) return;
+        btn.disabled = true;
+        btn.setAttribute('aria-busy', 'true');
+        setDispatch('Disparando execução do notebook.py...');
+        ClientCall.call('ApiEndpoints_dispatchAnalysis', [])
+          .then(function (res) {
+            var r = unwrapOk(res);
+            setDispatch(r.ok ? '✅ ' + (r.message || 'Disparado.') + (r.jobId ? ' (' + r.jobId + ')' : '')
+                              : '⚠️ ' + (r.message || 'Falha.'));
+          })
+          .catch(function (err) {
+            console.error('NCA-SEM: falha ao disparar análise', err);
+            setDispatch('⚠️ Não foi possível disparar a análise. Tente novamente.');
+          })
+          .finally(function () { btn.disabled = false; btn.setAttribute('aria-busy', 'false'); });
+      });
+
+      document.getElementById('sem-refresh-btn').addEventListener('click', function () {
+        var btn = this;
+        if (btn.disabled) return;
+        btn.disabled = true;
+        btn.setAttribute('aria-busy', 'true');
+        loadResults().finally(function () { btn.disabled = false; btn.setAttribute('aria-busy', 'false'); });
+      });
+
+      document.addEventListener('DOMContentLoaded', loadResults);
+    }());
+  </script>
+
+<script>
+/* codex-school-community-ux-script: pequenos ajustes de contexto escolar */
+(function() {
+  if (window.__codexSchoolCommunityUx) return;
+  window.__codexSchoolCommunityUx = true;
+
+  function ready(fn) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn, { once: true });
+    else fn();
+  }
+
+  ready(function() {
+    document.documentElement.setAttribute('data-community-context', 'school');
+
+    document.querySelectorAll('form').forEach(function(form) {
+      if (!form.getAttribute('aria-label') && !form.getAttribute('aria-labelledby')) {
+        form.setAttribute('aria-label', 'Formulario da comunidade escolar');
+      }
+    });
+
+    document.querySelectorAll('input, select, textarea').forEach(function(field) {
+      if (!field.id && field.name) field.id = 'field-' + String(field.name).replace(/[^a-zA-Z0-9_-]/g, '-');
+      if (field.required && !field.getAttribute('aria-required')) field.setAttribute('aria-required', 'true');
+      if (!field.getAttribute('autocomplete')) {
+        var type = (field.getAttribute('type') || '').toLowerCase();
+        var name = (field.getAttribute('name') || field.id || '').toLowerCase();
+        if (type === 'email' || name.indexOf('email') >= 0) field.setAttribute('autocomplete', 'email');
+        else if (name.indexOf('nome') >= 0 || name.indexOf('name') >= 0) field.setAttribute('autocomplete', 'name');
+        else if (name.indexOf('senha') >= 0 || name.indexOf('password') >= 0) field.setAttribute('autocomplete', 'current-password');
+      }
+    });
+
+    document.querySelectorAll('button:not([type])').forEach(function(button) {
+      button.setAttribute('type', 'button');
+    });
+  });
+})();
+</script>
+
+<script>
+/* codex-project-behavior-standardization: microcomportamentos compartilhados */
+(function() {
+  if (window.__codexProjectBehaviorStandardization) return;
+  window.__codexProjectBehaviorStandardization = true;
+
+  var SUBMIT_LOCK_MS = 2500;
+  var invalidFocusPending = false;
+
+  function isElement(value) {
+    return value && value.nodeType === 1;
+  }
+
+  function prefersReducedMotion() {
+    return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  function unlockForm(form, button) {
+    if (isElement(form)) {
+      delete form.dataset.codexSubmitting;
+      if (form.getAttribute('aria-busy') === 'true') form.setAttribute('aria-busy', 'false');
+    }
+
+    if (isElement(button) && button.dataset.codexSubmitLocked === 'true') {
+      delete button.dataset.codexSubmitLocked;
+      button.disabled = false;
+      button.removeAttribute('aria-disabled');
+    }
+  }
+
+  function restoreSubmitLocks(scope) {
+    var root = scope && scope.querySelectorAll ? scope : document;
+
+    root.querySelectorAll('form[data-codex-submitting="true"]').forEach(function(form) {
+      unlockForm(form);
+    });
+
+    root.querySelectorAll('[data-codex-submit-locked="true"]').forEach(function(button) {
+      unlockForm(null, button);
+    });
+  }
+
+  document.addEventListener('submit', function(event) {
+    var form = event.target;
+    if (!isElement(form) || String(form.tagName).toLowerCase() !== 'form') return;
+    if (form.hasAttribute('data-no-submit-lock')) return;
+
+    if (form.dataset.codexSubmitting === 'true') {
+      event.preventDefault();
+      return;
+    }
+
+    if (typeof form.checkValidity === 'function' && !form.checkValidity()) return;
+
+    form.dataset.codexSubmitting = 'true';
+    form.setAttribute('aria-busy', 'true');
+
+    var button = event.submitter || form.querySelector('button[type="submit"], input[type="submit"], button:not([type])');
+    if (isElement(button) && !button.disabled && !button.hasAttribute('data-no-submit-lock')) {
+      button.dataset.codexSubmitLocked = 'true';
+      button.disabled = true;
+      button.setAttribute('aria-disabled', 'true');
+    }
+
+    window.setTimeout(function() {
+      unlockForm(form, button);
+    }, SUBMIT_LOCK_MS);
+  }, true);
+
+  document.addEventListener('invalid', function(event) {
+    var field = event.target;
+    if (!isElement(field) || invalidFocusPending) return;
+    invalidFocusPending = true;
+
+    window.setTimeout(function() {
+      invalidFocusPending = false;
+      if (!document.documentElement.contains(field)) return;
+      try {
+        field.scrollIntoView({ block: 'center', inline: 'nearest', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+        field.focus({ preventScroll: true });
+      } catch (error) {
+        field.focus();
+      }
+    }, 0);
+  }, true);
+
+  document.addEventListener('keydown', function(event) {
+    if (event.key !== 'Escape') return;
+    var closedSomething = false;
+
+    var dialogs = Array.prototype.slice.call(document.querySelectorAll('dialog[open]'));
+    var dialog = dialogs[dialogs.length - 1];
+    if (dialog && typeof dialog.close === 'function') {
+      dialog.close();
+      closedSomething = true;
+    }
+
+    if (!closedSomething) {
+      var details = Array.prototype.slice.call(document.querySelectorAll('details[open]'));
+      var detail = details[details.length - 1];
+      if (detail) {
+        detail.removeAttribute('open');
+        closedSomething = true;
+      }
+    }
+
+    document.querySelectorAll('[aria-expanded="true"]').forEach(function(toggle) {
+      toggle.setAttribute('aria-expanded', 'false');
+      closedSomething = true;
+    });
+
+    if (closedSomething) event.preventDefault();
+  }, true);
+
+  window.addEventListener('pageshow', function() {
+    restoreSubmitLocks(document);
+  });
+
+  document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible') restoreSubmitLocks(document);
+  });
+})();
+</script>
+  <?!= include("ClientCall"); ?>
+
+<!-- CODEX_NOTEBOOK_GRAPH_GALLERY_V1 -->
+<section class="codex-notebook-graphs" data-codex-notebook-graphs aria-live="polite">
+  
+  <div class="codex-notebook-graphs__header">
+    <h2 class="codex-notebook-graphs__title">Gráficos da análise (notebook)</h2>
+    <p class="codex-notebook-graphs__status" data-codex-graphs-status>Carregando gráficos...</p>
+  </div>
+  <div class="codex-notebook-graphs__grid" data-codex-graphs-grid></div>
+</section>
+<script>
+(function () {
+  var section = document.currentScript && document.currentScript.previousElementSibling;
+  if (!section || !section.matches('[data-codex-notebook-graphs]')) return;
+  var status = section.querySelector('[data-codex-graphs-status]');
+  var grid = section.querySelector('[data-codex-graphs-grid]');
+
+  var META = {
+    '01_overview_abas': { t: 'Visão geral por aba', d: 'Volume de registros em cada aba da planilha.' },
+    '02_distribuicoes_numericas': { t: 'Distribuições numéricas', d: 'Dispersão das principais métricas (boxplot).' },
+    '03_top_categorias': { t: 'Top categorias', d: 'Categorias mais frequentes na aba principal.' },
+    '04_serie_temporal': { t: 'Série temporal', d: 'Evolução dos registros ao longo do tempo.' }
+  };
+  function meta(name) {
+    var key = String(name || '').toLowerCase().replace(/\.(png|jpe?g)$/, '');
+    if (META[key]) return META[key];
+    var pretty = key.replace(/^\d+[_-]?/, '').replace(/[_-]+/g, ' ').trim();
+    pretty = pretty ? pretty.charAt(0).toUpperCase() + pretty.slice(1) : 'Gráfico';
+    return { t: pretty, d: '' };
+  }
+  function setStatus(text) { if (status) status.textContent = text; }
+
+  var lightbox, lightImg;
+  function close() { if (lightbox) lightbox.classList.remove('is-open'); }
+  function openLightbox(src, alt) {
+    if (!lightbox) {
+      lightbox = document.createElement('div');
+      lightbox.className = 'codex-notebook-graphs__lightbox';
+      var btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'codex-notebook-graphs__close';
+      btn.setAttribute('aria-label', 'Fechar'); btn.textContent = '\u00d7';
+      lightImg = document.createElement('img');
+      lightbox.appendChild(btn); lightbox.appendChild(lightImg);
+      document.body.appendChild(lightbox);
+      lightbox.addEventListener('click', function (e) { if (e.target === lightbox || e.target === btn) close(); });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+    }
+    lightImg.src = src; lightImg.alt = alt || '';
+    lightbox.classList.add('is-open');
+  }
+
+  function render(response) {
+    var images = response && response.images ? response.images : [];
+    grid.innerHTML = '';
+    if (!images.length) {
+      grid.innerHTML = '<div class="codex-notebook-graphs__empty">' +
+        (response && response.message ? (response.message + ' ') : '') +
+        'Ainda não há gráficos. Rode <code>populateSyntheticData()</code> e depois o ' +
+        '<code>notebook.py</code> no Colab (com <code>SPREADSHEETS_ID</code> e <code>FOLDER_ID</code>).</div>';
+      setStatus('Nenhum gráfico ainda.');
+      return;
+    }
+    images.forEach(function (image) {
+      var info = meta(image.name);
+      var figure = document.createElement('figure');
+      figure.className = 'codex-notebook-graphs__figure';
+      var btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'codex-notebook-graphs__btn'; btn.title = 'Ampliar';
+      var img = document.createElement('img');
+      img.loading = 'lazy'; img.decoding = 'async'; img.src = image.dataUrl; img.alt = info.t;
+      btn.appendChild(img);
+      btn.addEventListener('click', function () { openLightbox(image.dataUrl, info.t); });
+      var cap = document.createElement('figcaption');
+      cap.className = 'codex-notebook-graphs__cap';
+      var ct = document.createElement('div');
+      ct.className = 'codex-notebook-graphs__cap-title'; ct.textContent = info.t;
+      cap.appendChild(ct);
+      if (info.d) {
+        var cd = document.createElement('div');
+        cd.className = 'codex-notebook-graphs__cap-desc'; cd.textContent = info.d;
+        cap.appendChild(cd);
+      }
+      figure.appendChild(btn); figure.appendChild(cap);
+      grid.appendChild(figure);
+    });
+    setStatus(images.length + ' gráfico(s).');
+  }
+
+  if (!window.google || !google.script || !google.script.run) {
+    setStatus('Disponível apenas no Web App publicado.');
+    grid.innerHTML = '<div class="codex-notebook-graphs__empty">Os gráficos aparecem quando esta tela roda dentro do Web App publicado.</div>';
+    return;
+  }
+  google.script.run
+    .withSuccessHandler(render)
+    .withFailureHandler(function (error) {
+      setStatus(error && error.message ? error.message : 'Não foi possível carregar os gráficos.');
+    })
+    .getNotebookGraphImages({});
+}());
+</script>
+<!-- /CODEX_NOTEBOOK_GRAPH_GALLERY_V1 -->
+</body>
+</html>
+
+
+
+
+
+
+
+

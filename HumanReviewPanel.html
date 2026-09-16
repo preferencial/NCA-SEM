@@ -1,0 +1,134 @@
+
+<script id="up-oracular-form-feedback">
+(function () {
+  'use strict';
+  if (window.UpOracularFeedback) return;
+
+  var timer = null;
+  function notify(kind, message) {
+    var box = document.getElementById('uo-feedback-box');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'uo-feedback-box';
+      box.className = 'uo-feedback-box';
+      box.setAttribute('role', 'status');
+      box.setAttribute('aria-live', 'polite');
+      document.body.appendChild(box);
+    }
+    box.dataset.kind = kind === 'err' ? 'err' : 'ok';
+    box.textContent = String(message || (kind === 'err' ? 'Nao foi possivel concluir.' : 'Operacao concluida.'));
+    box.classList.add('is-visible');
+    clearTimeout(timer);
+    timer = setTimeout(function () {
+      box.classList.remove('is-visible');
+    }, 1000);
+  }
+
+  function connectLabels(form) {
+    form.querySelectorAll('input:not([type="hidden"]), select, textarea').forEach(function (field, index) {
+      var id = field.id || ('uo-field-' + index + '-' + Math.random().toString(36).slice(2, 7));
+      field.id = id;
+      var label = form.querySelector('label[for="' + id + '"]');
+      if (!label) {
+        var sibling = field.previousElementSibling;
+        if (sibling && sibling.tagName === 'LABEL') {
+          sibling.htmlFor = id;
+          label = sibling;
+        }
+      }
+      if (label && field.parentElement && !field.parentElement.classList.contains('uo-field')) {
+        field.parentElement.classList.add('uo-field');
+      }
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('form').forEach(connectLabels);
+  });
+
+  document.addEventListener('submit', function (event) {
+    var form = event.target;
+    if (!form || form.tagName !== 'FORM') return;
+    form.setAttribute('aria-busy', 'true');
+    notify('ok', 'Enviando...');
+    window.setTimeout(function () {
+      if (form.getAttribute('aria-busy') === 'true') {
+        form.removeAttribute('aria-busy');
+      }
+    }, 10000);
+  }, true);
+
+  window.UpOracularFeedback = {
+    ok: function (message) { notify('ok', message); },
+    err: function (message) { notify('err', message); },
+    done: function (form, message) {
+      if (form) form.removeAttribute('aria-busy');
+      notify('ok', message);
+    },
+    fail: function (form, message) {
+      if (form) form.removeAttribute('aria-busy');
+      notify('err', message);
+    }
+  };
+}());
+</script>
+
+<section class="ai-review-panel" data-ai-review-panel hidden>
+  <header>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <strong>Rascunho gerado por IA</strong>
+    <span data-ai-review-state>Revisão humana pendente</span>
+  </header>
+  <textarea data-ai-review-content aria-label="Conteúdo do rascunho"></textarea>
+  <div class="ai-review-actions">
+    <button type="button" data-ai-review-edit>Editar</button>
+    <button type="button" data-ai-review-reject>Rejeitar</button>
+    <button type="button" data-ai-review-approve>Aprovar</button>
+  </div>
+</section>
+<style>
+  .ai-review-panel{border:1px solid #cbd5e1;padding:12px;margin:12px 0;background:#fff}
+  .ai-review-panel header{display:flex;justify-content:space-between;gap:12px;margin-bottom:8px}
+  .ai-review-panel textarea{box-sizing:border-box;width:100%;min-height:160px;padding:8px}
+  .ai-review-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}
+  .ai-review-actions button{min-height:36px;padding:6px 12px}
+</style>
+<script>
+(function () {
+  window.AiHumanReview = {
+    bind: function (root, draft, actorProvider) {
+      root = root || document.querySelector('[data-ai-review-panel]');
+      if (!root || !draft) return;
+      var content = root.querySelector('[data-ai-review-content]');
+      var state = root.querySelector('[data-ai-review-state]');
+      root.hidden = false;
+      content.value = draft.content || '';
+      state.textContent = 'Revisão humana pendente';
+      function actor() {
+        return String(actorProvider ? actorProvider() : '').trim() || 'usuario.autenticado';
+      }
+      root.querySelector('[data-ai-review-edit]').onclick = function () {
+        google.script.run.withSuccessHandler(function (next) {
+          draft = next; state.textContent = 'Rascunho editado; nova aprovação necessária';
+        }).editAiReviewDraft(draft.id, content.value, actor());
+      };
+      root.querySelector('[data-ai-review-reject]').onclick = function () {
+        var reason = window.prompt('Motivo da rejeição:');
+        if (reason === null) return;
+        google.script.run.withSuccessHandler(function (next) {
+          draft = next; state.textContent = 'Rejeitado';
+        }).rejectAiReviewDraft(draft.id, reason, actor());
+      };
+      root.querySelector('[data-ai-review-approve]').onclick = function () {
+        google.script.run.withSuccessHandler(function (next) {
+          draft = next; state.textContent = 'Aprovado por ' + next.reviewedBy;
+        }).approveAiReviewDraft(draft.id, draft.version, actor());
+      };
+    }
+  };
+})();
+</script>
+
+
+

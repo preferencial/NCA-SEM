@@ -1,0 +1,198 @@
+
+<script id="up-oracular-form-feedback">
+(function () {
+  'use strict';
+  if (window.UpOracularFeedback) return;
+
+  var timer = null;
+  function notify(kind, message) {
+    var box = document.getElementById('uo-feedback-box');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'uo-feedback-box';
+      box.className = 'uo-feedback-box';
+      box.setAttribute('role', 'status');
+      box.setAttribute('aria-live', 'polite');
+      document.body.appendChild(box);
+    }
+    box.dataset.kind = kind === 'err' ? 'err' : 'ok';
+    box.textContent = String(message || (kind === 'err' ? 'Nao foi possivel concluir.' : 'Operacao concluida.'));
+    box.classList.add('is-visible');
+    clearTimeout(timer);
+    timer = setTimeout(function () {
+      box.classList.remove('is-visible');
+    }, 1000);
+  }
+
+  function connectLabels(form) {
+    form.querySelectorAll('input:not([type="hidden"]), select, textarea').forEach(function (field, index) {
+      var id = field.id || ('uo-field-' + index + '-' + Math.random().toString(36).slice(2, 7));
+      field.id = id;
+      var label = form.querySelector('label[for="' + id + '"]');
+      if (!label) {
+        var sibling = field.previousElementSibling;
+        if (sibling && sibling.tagName === 'LABEL') {
+          sibling.htmlFor = id;
+          label = sibling;
+        }
+      }
+      if (label && field.parentElement && !field.parentElement.classList.contains('uo-field')) {
+        field.parentElement.classList.add('uo-field');
+      }
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('form').forEach(connectLabels);
+  });
+
+  document.addEventListener('submit', function (event) {
+    var form = event.target;
+    if (!form || form.tagName !== 'FORM') return;
+    form.setAttribute('aria-busy', 'true');
+    notify('ok', 'Enviando...');
+    window.setTimeout(function () {
+      if (form.getAttribute('aria-busy') === 'true') {
+        form.removeAttribute('aria-busy');
+      }
+    }, 10000);
+  }, true);
+
+  window.UpOracularFeedback = {
+    ok: function (message) { notify('ok', message); },
+    err: function (message) { notify('err', message); },
+    done: function (form, message) {
+      if (form) form.removeAttribute('aria-busy');
+      notify('ok', message);
+    },
+    fail: function (form, message) {
+      if (form) form.removeAttribute('aria-busy');
+      notify('err', message);
+    }
+  };
+}());
+</script>
+
+<script>
+/**
+ * codex-client-call-standardization
+ * Wrapper unico para google.script.run.
+ *  - Promessa em vez de callbacks aninhados.
+ *  - Retry com backoff exponencial + jitter em falhas transitorias.
+ *  - Normaliza o envelope StandardReturn ({success, data, error}):
+ *    resolve com .data em caso de sucesso, rejeita com Error em caso de falha.
+ *  - Espelho client-side do retry endurecido no backend.
+ *
+ * Uso:
+ *   ClientCall.call("getPlayerAchievements", [arg1])
+ *     .then(function (data) { ... })
+ *     .catch(function (err) { ... });
+ *   // acucar sintatico:
+ *   callServer("getPlayerAchievements", arg1).then(...).catch(...);
+ *
+ * Opcoes (3o argumento de ClientCall.call):
+ *   { retries: 2, baseDelayMs: 400, factor: 2, jitter: true, unwrap: true }
+ *   unwrap: false retorna a resposta crua (sem desempacotar StandardReturn).
+ */
+(function (global) {
+  if (global.ClientCall) { return; }
+
+  var DEFAULTS = { retries: 2, baseDelayMs: 400, factor: 2, jitter: true, unwrap: true };
+
+  function delay_(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+
+  function toError_(value) {
+    if (value instanceof Error) { return value; }
+    if (value === null || value === undefined) { return new Error("Erro desconhecido."); }
+    if (typeof value === "string") { return new Error(value); }
+    if (value.message) { return new Error(String(value.message)); }
+    return new Error(String(value));
+  }
+
+  // Por padrao tratamos qualquer falha de transporte como transitoria; o backend
+  // ja valida regras de negocio e devolve StandardReturn.fail (que NAO e' retry).
+  function isTransient_(error) {
+    if (!error) { return true; }
+    var msg = String(error.message || error).toLowerCase();
+    if (msg.indexOf("metodo backend inexistente") >= 0) { return false; }
+    if (msg.indexOf("google.script.run indisponivel") >= 0) { return false; }
+    return true;
+  }
+
+  function isEnvelope_(value) {
+    return Boolean(
+      value &&
+      typeof value === "object" &&
+      typeof value.success === "boolean" &&
+      Object.prototype.hasOwnProperty.call(value, "data") &&
+      Object.prototype.hasOwnProperty.call(value, "error")
+    );
+  }
+
+  function unwrap_(value) {
+    if (isEnvelope_(value)) {
+      if (value.success) { return value.data; }
+      throw toError_(value.error);
+    }
+    return value;
+  }
+
+  function invoke_(method, args) {
+    return new Promise(function (resolve, reject) {
+      if (!global.google || !google.script || !google.script.run) {
+        reject(new Error("google.script.run indisponivel")); return;
+      }
+      var runner = google.script.run
+        .withSuccessHandler(function (res) { resolve(res); })
+        .withFailureHandler(function (err) { reject(toError_(err)); });
+      if (typeof runner[method] !== "function") {
+        reject(new Error("Metodo backend inexistente: " + method)); return;
+      }
+      try {
+        runner[method].apply(runner, args || []);
+      } catch (err) {
+        reject(toError_(err));
+      }
+    });
+  }
+
+  function call(method, args, options) {
+    var cfg = {};
+    var key;
+    for (key in DEFAULTS) {
+      if (Object.prototype.hasOwnProperty.call(DEFAULTS, key)) { cfg[key] = DEFAULTS[key]; }
+    }
+    if (options) {
+      for (key in options) {
+        if (Object.prototype.hasOwnProperty.call(options, key)) { cfg[key] = options[key]; }
+      }
+    }
+
+    var attempt = 0;
+    function attemptRun() {
+      return invoke_(method, args).then(function (res) {
+        return cfg.unwrap === false ? res : unwrap_(res);
+      }).catch(function (err) {
+        if (attempt < cfg.retries && isTransient_(err)) {
+          attempt += 1;
+          var d = cfg.baseDelayMs * Math.pow(cfg.factor, attempt - 1);
+          if (cfg.jitter) { d += Math.random() * cfg.baseDelayMs; }
+          return delay_(d).then(attemptRun);
+        }
+        throw toError_(err);
+      });
+    }
+    return attemptRun();
+  }
+
+  global.ClientCall = { call: call, defaults: DEFAULTS };
+  global.callServer = function (method) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    return call(method, args);
+  };
+})(window);
+</script>
+
+

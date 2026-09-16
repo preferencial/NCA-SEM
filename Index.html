@@ -1,0 +1,1351 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <?!= include('SharedTokens'); ?>
+<meta
+    name="description"
+    content="Painel educacional integrado para acompanhamento de alunos e indicadores NCA-SEM."
+  >
+  <title>NCA-SEM Educacional</title>
+  <?!= include('Styles'); ?>
+  <style id="force-auth-visibility">
+    /* FORÇA BRUTA: Controle de visibilidade da autenticação */
+    #auth-gate[hidden],
+    #auth-gate.hidden,
+    #auth-gate[data-hidden="true"] {
+      display: none !important;
+      visibility: hidden !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+      position: absolute !important;
+      left: -9999px !important;
+      top: -9999px !important;
+    }
+    
+    #authenticated-app[hidden],
+    #authenticated-app.hidden,
+    #authenticated-app[data-hidden="true"] {
+      display: none !important;
+      visibility: hidden !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+    }
+    
+    #authenticated-app:not([hidden]):not(.hidden):not([data-hidden="true"]) {
+      display: grid !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+    }
+  </style>
+  <style id="codex-mobile-a11y">
+  /* Mobile-first accessibility baseline for Chrome and Google-style readability. */
+  :where(html) {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  :where(body) {
+    min-width: 0;
+    overflow-x: hidden;
+    line-height: 1.5;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :where(p, li, dd, dt, blockquote, figcaption, label, td, th, input, select, textarea, button) {
+    line-height: 1.5;
+  }
+
+  :where(p, li, dd, dt, blockquote, figcaption) {
+    max-width: 72ch;
+  }
+
+  :where(button, [role="button"], input, select, textarea, a) {
+    touch-action: manipulation;
+  }
+
+  :where(button, [role="button"], input:not([type="hidden"]), select, textarea) {
+    font: inherit;
+    min-height: 44px;
+  }
+
+  :where(a, button, [role="button"], input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 3px solid #1a73e8;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
+  }
+
+  :where(img, video, canvas, svg, iframe) {
+    max-width: 100%;
+  }
+
+  :where(img, video, canvas, svg) {
+    height: auto;
+  }
+
+  :where(table) {
+    max-width: 100%;
+  }
+
+  :where(.table-responsive, .table-wrapper, .data-table, .table-container, .responsive-table) {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  :where(.container, .content, .main, .page, .page-content, .app-content, main) {
+    min-width: 0;
+  }
+
+  :where(.row, .cards, .card-grid, .grid, .toolbar, .actions, .button-group, .form-row) {
+    min-width: 0;
+  }
+
+  @media (max-width: 640px) {
+    :where(body) {
+      font-size: 16px;
+    }
+
+    :where(.container, .content, .page-content, .app-content, main) {
+      width: 100%;
+      max-width: 100%;
+    }
+
+    :where(.row, .cards, .card-grid, .grid, .toolbar, .actions, .button-group, .form-row) {
+      flex-wrap: wrap;
+    }
+
+    :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea, button) {
+      max-width: 100%;
+    }
+
+    :where(.hide-on-mobile) {
+      display: none !important;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+
+
+/* codex-school-community-ux: ajustes finos para uso recorrente por comunidade escolar */
+
+:root {
+  color-scheme: dark;
+  
+  /* Up Oracular (mantido para compatibilidade) */
+  --uo-bg: #15171c;
+  --uo-panel: #20242b;
+  --uo-text: #e9ecf1;
+  --uo-muted: #b2b9c4;
+  --uo-border: #343941;
+  --uo-accent: #7aa2d6;
+  --uo-radius-group: 10px;
+  --uo-radius-control: 8px;
+  
+  /* SGTE Design System (aliases e extensões) */
+  --sgte-bg: var(--uo-bg);
+  --sgte-surface: var(--uo-panel);
+  --sgte-surface-soft: #1a1d23;
+  --sgte-text: var(--uo-text);
+  --sgte-text-muted: var(--uo-muted);
+  --sgte-border: var(--uo-border);
+  --sgte-primary: #8ab4f8;
+  --sgte-primary-strong: #aecbfa;
+  --sgte-primary-soft: rgba(138, 180, 248, 0.12);
+  --sgte-success: #9be7c1;
+  --sgte-warning: #f4c952;
+  --sgte-danger: #f28b82;
+  --sgte-info: #89c4f4;
+  --sgte-radius: 12px;
+  --sgte-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.24);
+  
+  /* Safe areas para S20 */
+  --sgte-safe-area-top: env(safe-area-inset-top, 0px);
+  --sgte-safe-area-bottom: env(safe-area-inset-bottom, 16px);
+  --sgte-safe-area-left: env(safe-area-inset-left, 12px);
+  --sgte-safe-area-right: env(safe-area-inset-right, 12px);
+}
+
+/* Samsung S20 Layout Optimization */
+.view-header, .page-header, main, [class*="content"], .container {
+  padding-left: var(--sgte-safe-area-left);
+  padding-right: var(--sgte-safe-area-right);
+}
+
+main, [class*="content"], .container {
+  padding-bottom: calc(var(--sgte-safe-area-bottom) + 20px);
+}
+
+:where(html) {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+:where(body) {
+  overscroll-behavior-y: contain;
+}
+
+:where(p, li, dd, dt, blockquote, figcaption, label, td, th) {
+  line-height: 1.5;
+}
+
+:where(main, .main, .content, .page, .app, .app-shell, .container, .dashboard, .workspace) {
+  padding-bottom: var(--codex-school-safe-bottom);
+}
+
+:where(a, button, .btn, .button, [role="button"], input, select, textarea, summary) {
+  min-height: var(--codex-school-touch);
+  touch-action: manipulation;
+}
+
+:where(button, .btn, .button, [role="button"], input[type="submit"], input[type="button"]) {
+  border-radius: var(--codex-school-radius) !important;
+  font-weight: 700;
+}
+
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 3px solid var(--codex-school-focus) !important;
+  outline-offset: 3px !important;
+}
+
+:where(label) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  color: var(--codex-gentle-muted, var(--text-muted, var(--codex-school-muted-text)));
+  font-weight: 700;
+}
+
+:where(form) {
+  border-radius: var(--codex-school-radius) !important;
+}
+
+:where(fieldset) {
+  border-radius: var(--codex-school-radius) !important;
+  border-color: var(--codex-school-field-border);
+}
+
+:where(legend) {
+  padding-inline: 6px;
+  font-weight: 700;
+}
+
+:where(.form-group, .input-field, .field, .form-field, .control-group) {
+  margin-bottom: var(--codex-school-form-gap);
+}
+
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea) {
+  width: min(100%, 100%);
+  border-radius: var(--codex-school-field-radius) !important;
+  border-color: var(--codex-school-field-border) !important;
+  background-color: var(--input-bg, var(--field-bg, var(--codex-school-field-bg)));
+  color: var(--input-text, var(--text-color, var(--codex-school-field-text)));
+  font-size: 16px !important;
+}
+
+:where(input::placeholder, textarea::placeholder) {
+  color: var(--placeholder-color, #94a3b8);
+  opacity: 1;
+}
+
+:where(input[required], select[required], textarea[required]) {
+  border-left: 3px solid var(--codex-gentle-primary-strong, #aecbfa) !important;
+}
+
+:where(input:disabled, select:disabled, textarea:disabled, button:disabled, [aria-disabled="true"]) {
+  cursor: not-allowed !important;
+  opacity: 0.68;
+}
+
+:where(.help, .hint, .help-text, .form-help, small) {
+  line-height: 1.45;
+  color: var(--codex-gentle-muted, var(--text-muted, var(--codex-school-muted-text)));
+}
+
+:where(.actions, .form-actions, .button-row, .toolbar, .topbar, nav, [role="toolbar"]) {
+  gap: 8px;
+}
+
+:where(.actions, .form-actions, .button-row) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+:where(.actions, .form-actions, .button-row) > :where(button, .btn, .button, [role="button"]) {
+  flex: 1 1 148px;
+}
+
+:where(.card, .panel, .box, .tile, .item, .list-item, .action-card) {
+  border-radius: var(--codex-school-radius) !important;
+}
+
+:where(.section, .surface, .widget, .modal-content, .dialog-content, .drawer, .dropdown, .menu) {
+  border-radius: var(--codex-school-radius) !important;
+}
+
+:where(.filters, .search-panel, .form-section) {
+  border-radius: var(--codex-school-radius) !important;
+  background: var(--codex-school-soft-surface);
+}
+
+:where(table) {
+  border-collapse: collapse;
+}
+
+:where(table, .table, .data-table) {
+  max-width: 100%;
+}
+
+:where(.table-wrap, .table-wrapper, .table-container, .responsive-table) {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+:where(th, td) {
+  vertical-align: top;
+}
+
+:where(.toast, .alert, .notice, .snackbar, [role="status"], [role="alert"]) {
+  border-radius: var(--codex-school-radius) !important;
+  line-height: 1.45;
+}
+
+@media (max-width: 420px) {
+  :where(body) {
+    font-size: 16px;
+  }
+
+  :where(h1) {
+    font-size: clamp(1.55rem, 1.35rem + 1vw, 2rem) !important;
+    line-height: 1.15 !important;
+  }
+
+  :where(h2) {
+    font-size: clamp(1.25rem, 1.1rem + 0.8vw, 1.55rem) !important;
+    line-height: 1.2 !important;
+  }
+
+  :where(.toolbar, .topbar, nav, [role="toolbar"]) {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+
+  :where(.hide-mobile, .desktop-only) {
+    display: none !important;
+  }
+}
+</style>
+
+
+
+<style>
+/* codex-theme-toggle: sun-moon control integrated with page buttons */
+:root {
+  --codex-theme-toggle-bg: rgba(255,255,255,0.055);
+  --codex-theme-toggle-border: rgba(255,255,255,0.16);
+  --codex-theme-toggle-text: var(--codex-gentle-text, #eef1f5);
+}
+
+:root[data-theme="light"],
+html[data-theme="light"],
+body[data-theme="light"] {
+  color-scheme: light;
+  --codex-gentle-bg: #f7f8fb;
+  --codex-gentle-bg-soft: #ffffff;
+  --codex-gentle-surface: #ffffff;
+  --codex-gentle-surface-2: #f1f4f8;
+  --codex-gentle-border: #d8dee8;
+  --codex-gentle-text: #20242a;
+  --codex-gentle-muted: #596273;
+  --codex-gentle-dim: #6f7a8a;
+  --codex-gentle-primary: #1a73e8;
+  --codex-gentle-primary-strong: #1558d6;
+  --codex-gentle-accent: #b84377;
+  --codex-ds-primary: var(--codex-gentle-primary);
+  --codex-ds-primary-strong: var(--codex-gentle-primary-strong);
+  --codex-ds-text: var(--codex-gentle-text);
+  --codex-ds-muted: var(--codex-gentle-muted);
+  --codex-ds-surface: var(--codex-gentle-surface);
+  --codex-ds-border: var(--codex-gentle-border);
+}
+
+html[data-theme="light"],
+html[data-theme="light"] body,
+body[data-theme="light"] {
+  background: radial-gradient(circle at 10% 0%, rgba(26,115,232,0.09), transparent 28%),
+              radial-gradient(circle at 90% 8%, rgba(184,67,119,0.07), transparent 24%),
+              #f7f8fb !important;
+  color: var(--codex-gentle-text) !important;
+}
+
+html[data-theme="light"] :where(.card, .panel, .section, .surface, .box, .widget, .modal-content, .dialog-content, .drawer, .dropdown, .menu, .table-wrapper, .table-wrap, .table-container, form) {
+  background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(248,250,252,0.96)) !important;
+  color: var(--codex-gentle-text) !important;
+  border-color: var(--codex-gentle-border) !important;
+  box-shadow: 0 10px 28px rgba(31,41,55,0.10) !important;
+}
+
+html[data-theme="light"] :where(header, nav, aside, footer, .navbar, .sidebar, .topbar, .app-header, .app-footer) {
+  background: rgba(255,255,255,0.92) !important;
+  color: var(--codex-gentle-text) !important;
+  border-color: var(--codex-gentle-border) !important;
+}
+
+.codex-theme-toggle {
+  width: auto !important;
+  position: fixed;
+  top: max(10px, env(safe-area-inset-top));
+  right: max(10px, env(safe-area-inset-right));
+  z-index: 2147483000;
+  width: auto;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--codex-theme-toggle-border);
+  border-radius: 999px;
+  background: var(--codex-theme-toggle-bg);
+  color: var(--codex-theme-toggle-text);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.codex-theme-toggle__icon {
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.codex-theme-toggle__label {
+  font-size: 0.875rem;
+}
+
+.codex-theme-toggle.is-integrated {
+  position: static;
+  z-index: auto;
+  margin-left: 0.5rem;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+@media (max-width: 480px) {
+  .codex-theme-toggle:not(.is-integrated) .codex-theme-toggle__label {
+    display: none;
+  }
+}
+</style>
+
+
+
+<script id="up-oracular-form-feedback">
+(function () {
+  'use strict';
+  if (window.UpOracularFeedback) return;
+
+  var timer = null;
+  function notify(kind, message) {
+    var box = document.getElementById('uo-feedback-box');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'uo-feedback-box';
+      box.className = 'uo-feedback-box';
+      box.setAttribute('role', 'status');
+      box.setAttribute('aria-live', 'polite');
+      document.body.appendChild(box);
+    }
+    box.dataset.kind = kind === 'err' ? 'err' : 'ok';
+    box.textContent = String(message || (kind === 'err' ? 'Nao foi possivel concluir.' : 'Operacao concluida.'));
+    box.classList.add('is-visible');
+    clearTimeout(timer);
+    timer = setTimeout(function () {
+      box.classList.remove('is-visible');
+    }, 1000);
+  }
+
+  function connectLabels(form) {
+    form.querySelectorAll('input:not([type="hidden"]), select, textarea').forEach(function (field, index) {
+      var id = field.id || ('uo-field-' + index + '-' + Math.random().toString(36).slice(2, 7));
+      field.id = id;
+      var label = form.querySelector('label[for="' + id + '"]');
+      if (!label) {
+        var sibling = field.previousElementSibling;
+        if (sibling && sibling.tagName === 'LABEL') {
+          sibling.htmlFor = id;
+          label = sibling;
+        }
+      }
+      if (label && field.parentElement && !field.parentElement.classList.contains('uo-field')) {
+        field.parentElement.classList.add('uo-field');
+      }
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('form').forEach(connectLabels);
+  });
+
+  document.addEventListener('submit', function (event) {
+    var form = event.target;
+    if (!form || form.tagName !== 'FORM') return;
+    form.setAttribute('aria-busy', 'true');
+    notify('ok', 'Enviando...');
+    window.setTimeout(function () {
+      if (form.getAttribute('aria-busy') === 'true') {
+        form.removeAttribute('aria-busy');
+      }
+    }, 10000);
+  }, true);
+
+  window.UpOracularFeedback = {
+    ok: function (message) { notify('ok', message); },
+    err: function (message) { notify('err', message); },
+    done: function (form, message) {
+      if (form) form.removeAttribute('aria-busy');
+      notify('ok', message);
+    },
+    fail: function (form, message) {
+      if (form) form.removeAttribute('aria-busy');
+      notify('err', message);
+    }
+  };
+}());
+</script>
+
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  
+  <style id="cdx-border-to-color">
+/* Padronização de borders → cores complementares (FROTA-20) */
+input:not([type="hidden"]),
+textarea,
+select,
+[class*="input"],
+[class*="field"],
+[class*="form"],
+.card,
+.panel,
+.box,
+.container,
+.modal,
+[class*="modal"],
+[class*="dialog"],
+dialog {
+  border: none !important;
+  border-width: 0 !important;
+}
+
+input:not([type="hidden"]),
+textarea,
+select {
+  background-color: #eef1f5 !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1) !important;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 0 2px #1f2937 !important;
+}
+  </style>
+
+  
+</head>
+<body>
+  <script>
+    // FORÇA BRUTA: Garante que apenas um elemento seja visível no início
+    (function() {
+      var authGate = document.getElementById('auth-gate');
+      var authenticatedApp = document.getElementById('authenticated-app');
+      
+      // Por padrão, esconde tudo
+      if (authGate) {
+        authGate.hidden = true;
+        authGate.setAttribute('hidden', '');
+        authGate.setAttribute('data-hidden', 'true');
+        authGate.style.display = 'none';
+        authGate.classList.add('hidden');
+      }
+      
+      if (authenticatedApp) {
+        authenticatedApp.hidden = true;
+        authenticatedApp.setAttribute('hidden', '');
+        authenticatedApp.setAttribute('data-hidden', 'true');
+        authenticatedApp.style.display = 'none';
+        authenticatedApp.classList.add('hidden');
+      }
+    })();
+  </script>
+<button id="codex-theme-toggle" class="codex-theme-toggle btn btn-secondary" type="button" aria-label="Alternar tema claro e escuro" title="Alternar tema">
+  <span class="codex-theme-toggle__icon" aria-hidden="true">🌙</span>
+  <span class="codex-theme-toggle__label">Tema</span>
+</button>
+  <a class="skip-link" href="#main-content">Pular para o conteúdo</a>
+
+  <div id="authenticated-app" class="app-shell" hidden>
+    <?!= include('Sidebar'); ?>
+
+    <div class="app-workspace">
+      <?!= include('Navbar'); ?>
+
+      <main id="main-content" class="main-content" tabindex="-1">
+        <section
+          id="view-dashboard"
+          class="app-view is-active"
+          aria-labelledby="dashboard-title"
+        >
+          <section class="hero-surface" aria-labelledby="dashboard-title">
+            <div class="hero-copy">
+              <div class="hero-badge">
+                <span class="badge badge-info">NCA-SEM Educacional</span>
+              </div>
+              <p class="eyebrow">Plataforma de Análise Estatística</p>
+              <h1 id="dashboard-title">Painel de Controle Educacional</h1>
+              <p class="page-description">
+                Sistema integrado para análise de <strong>Necessary Condition Analysis (NCA)</strong> e 
+                <strong>Structural Equation Modeling (SEM)</strong> aplicado ao contexto educacional. 
+                Monitore indicadores, identifique gargalos no rendimento escolar e tome decisões 
+                pedagógicas baseadas em evidências estatísticas robustas.
+              </p>
+              <div class="hero-features">
+                <div class="feature-item">
+                  <span class="feature-icon" aria-hidden="true"><i class="material-icons cdx-mi" aria-hidden="true">bar_chart</i></span>
+                  <span class="feature-text">Modelagem Estrutural</span>
+                </div>
+                <div class="feature-item">
+                  <span class="feature-icon" aria-hidden="true"><i class="material-icons cdx-mi" aria-hidden="true">flag</i></span>
+                  <span class="feature-text">Análise de Condições Necessárias</span>
+                </div>
+                <div class="feature-item">
+                  <span class="feature-icon" aria-hidden="true"><i class="material-icons cdx-mi" aria-hidden="true">smart_toy</i></span>
+                  <span class="feature-text">Pareceres com IA</span>
+                </div>
+                <div class="feature-item">
+                  <span class="feature-icon" aria-hidden="true"><i class="material-icons cdx-mi" aria-hidden="true">trending_up</i></span>
+                  <span class="feature-text">Visualizações Interativas</span>
+                </div>
+              </div>
+            </div>
+            <div class="hero-actions">
+              <button class="button button-primary" type="button" data-view-target="analises">
+                <span class="button-icon" aria-hidden="true"><i class="material-icons cdx-mi" aria-hidden="true">bar_chart</i></span>
+                Iniciar Nova Análise
+              </button>
+              <button class="button button-secondary" type="button" data-open-aluno-form>
+                <span class="button-icon" aria-hidden="true"><i class="material-icons cdx-mi" aria-hidden="true">add</i></span>
+                Registrar Aluno
+              </button>
+              <button class="button button-quiet" type="button" onclick="window.scrollTo({top: document.getElementById('info-nca-sem').offsetTop - 20, behavior: 'smooth'})">
+                <span class="button-icon" aria-hidden="true">ℹ️</span>
+                Sobre NCA-SEM
+              </button>
+            </div>
+          </section>
+
+          <section class="status-banner" aria-label="Status do sistema">
+            <div class="status-banner-inner">
+              <div class="status-item">
+                <span class="status-icon status-icon--success" aria-hidden="true">✓</span>
+                <div class="status-content">
+                  <span class="status-label">Sistema</span>
+                  <span class="status-value">Operacional</span>
+                </div>
+              </div>
+              <div class="status-item">
+                <span class="status-icon status-icon--info" aria-hidden="true"><i class="material-icons cdx-mi" aria-hidden="true">lock</i></span>
+                <div class="status-content">
+                  <span class="status-label">Governança</span>
+                  <span class="status-value">FROTA-2026</span>
+                </div>
+              </div>
+              <div class="status-item">
+                <span class="status-icon status-icon--info" aria-hidden="true"><i class="material-icons cdx-mi" aria-hidden="true">smart_toy</i></span>
+                <div class="status-content">
+                  <span class="status-label">IA Gemini</span>
+                  <span class="status-value">Ativo</span>
+                </div>
+              </div>
+              <div class="status-item">
+                <span class="status-icon status-icon--warning" aria-hidden="true"><i class="material-icons cdx-mi" aria-hidden="true">bolt</i></span>
+                <div class="status-content">
+                  <span class="status-label">Última Sincronização</span>
+                  <span class="status-value" id="last-sync-time">Carregando...</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <div class="metrics-grid metrics-grid--hero" aria-label="Indicadores principais">
+            <article class="metric-card metric-card--featured">
+              <div class="metric-header">
+                <span class="metric-icon" aria-hidden="true"><i class="material-icons cdx-mi" aria-hidden="true">group</i></span>
+                <span class="metric-label">Alunos Ativos</span>
+              </div>
+              <strong id="metric-total-alunos" class="metric-value">0</strong>
+              <span class="metric-context">registros acompanhados no sistema</span>
+              <div class="metric-footer">
+                <span class="metric-trend metric-trend--neutral">—</span>
+                <span class="metric-trend-label">sem alteração esta semana</span>
+              </div>
+            </article>
+            <article class="metric-card">
+              <div class="metric-header">
+                <span class="metric-icon" aria-hidden="true"><i class="material-icons cdx-mi" aria-hidden="true">account_balance</i></span>
+                <span class="metric-label">Escolas Atendidas</span>
+              </div>
+              <strong id="metric-escolas" class="metric-value">0</strong>
+              <span class="metric-context">unidades educacionais cadastradas</span>
+              <div class="metric-footer">
+                <button class="metric-action" type="button" data-view-target="escolas">Ver detalhes</button>
+              </div>
+            </article>
+            <article class="metric-card">
+              <div class="metric-header">
+                <span class="metric-icon" aria-hidden="true"><i class="material-icons cdx-mi" aria-hidden="true">person</i>‍<i class="material-icons cdx-mi" aria-hidden="true">account_balance</i></span>
+                <span class="metric-label">Professores Ativos</span>
+              </div>
+              <strong id="metric-professores" class="metric-value">0</strong>
+              <span class="metric-context">vínculos docentes registrados</span>
+              <div class="metric-footer">
+                <button class="metric-action" type="button" data-view-target="professores">Ver detalhes</button>
+              </div>
+            </article>
+            <article class="metric-card">
+              <div class="metric-header">
+                <span class="metric-icon" aria-hidden="true"><i class="material-icons cdx-mi" aria-hidden="true">square_foot</i></span>
+                <span class="metric-label">Média em Matemática</span>
+              </div>
+              <strong id="metric-matematica" class="metric-value">--</strong>
+              <span class="metric-context">escala de 0 a 10 pontos</span>
+              <div class="metric-footer">
+                <span class="metric-trend metric-trend--neutral">—</span>
+                <span class="metric-trend-label">aguardando dados</span>
+              </div>
+            </article>
+            <article class="metric-card">
+              <div class="metric-header">
+                <span class="metric-icon" aria-hidden="true"><i class="material-icons cdx-mi" aria-hidden="true">calendar_month</i></span>
+                <span class="metric-label">Frequência Média</span>
+              </div>
+              <strong id="metric-frequencia" class="metric-value">--</strong>
+              <span class="metric-context">percentual de presença dos alunos</span>
+              <div class="metric-footer">
+                <span class="metric-trend metric-trend--neutral">—</span>
+                <span class="metric-trend-label">aguardando dados</span>
+              </div>
+            </article>
+            <article class="metric-card">
+              <div class="metric-header">
+                <span class="metric-icon" aria-hidden="true"><i class="material-icons cdx-mi" aria-hidden="true">bar_chart</i></span>
+                <span class="metric-label">Análises Realizadas</span>
+              </div>
+              <strong id="metric-analises" class="metric-value">0</strong>
+              <span class="metric-context">modelos NCA/SEM executados</span>
+              <div class="metric-footer">
+                <button class="metric-action" type="button" data-view-target="analises">Iniciar análise</button>
+              </div>
+            </article>
+          </div>
+
+          <div class="dashboard-panels">
+            <section class="panel panel--primary" aria-labelledby="info-nca-sem">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Metodologia</p>
+                  <h2 id="info-nca-sem">O que é NCA-SEM?</h2>
+                </div>
+                <span class="panel-badge" aria-label="Informativo">ℹ️</span>
+              </div>
+              <div class="panel-body">
+                <div class="info-grid">
+                  <div class="info-block">
+                    <h3 class="info-title">
+                      <span class="info-icon" aria-hidden="true"><i class="material-icons cdx-mi" aria-hidden="true">flag</i></span>
+                      NCA - Necessary Condition Analysis
+                    </h3>
+                    <p class="info-description">
+                      Identifica <strong>condições necessárias</strong> (mas não suficientes) para o sucesso. 
+                      Por exemplo: "Frequência mínima de 75% é necessária para aprovação" — sem ela, 
+                      o resultado desejado não ocorre, mas tê-la não garante o resultado.
+                    </p>
+                    <ul class="info-list">
+                      <li>Traça linhas de teto (ceiling line) nos gráficos de dispersão</li>
+                      <li>Determina barreiras estruturais ao desempenho</li>
+                      <li>Diferencia correlação de causalidade necessária</li>
+                    </ul>
+                  </div>
+                  <div class="info-block">
+                    <h3 class="info-title">
+                      <span class="info-icon" aria-hidden="true"><i class="material-icons cdx-mi" aria-hidden="true">link</i></span>
+                      SEM - Structural Equation Modeling
+                    </h3>
+                    <p class="info-description">
+                      Modela <strong>relações complexas</strong> entre múltiplas variáveis simultaneamente. 
+                      Usa coeficientes de caminho (path coefficients) para mostrar como fatores interagem 
+                      e influenciam resultados educacionais.
+                    </p>
+                    <ul class="info-list">
+                      <li>Analisa efeitos diretos e indiretos entre variáveis</li>
+                      <li>Valida modelos teóricos com dados empíricos</li>
+                      <li>Mede força e significância estatística das relações</li>
+                    </ul>
+                  </div>
+                </div>
+                <div class="info-cta">
+                  <p class="info-highlight">
+                    <strong>Reversão Pedagógica:</strong> Transformamos achados estatísticos em ações concretas 
+                    através de pareceres gerados por IA (Google Gemini), traduzindo p-valores e coeficientes 
+                    em linguagem acessível para educadores.
+                  </p>
+                  <button class="button button-primary" type="button" data-view-target="analises">
+                    Começar minha primeira análise
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <section class="panel panel--quiet" aria-labelledby="recent-title">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Atividade Recente</p>
+                  <h2 id="recent-title">Últimas Atualizações</h2>
+                </div>
+                <button
+                  class="button button-quiet"
+                  type="button"
+                  data-view-target="alunos"
+                >
+                  <span class="button-icon" aria-hidden="true"><i class="material-icons cdx-mi" aria-hidden="true">assignment</i></span>
+                  Ver lista completa
+                </button>
+              </div>
+              <div class="panel-body">
+                <div id="recent-alunos" class="recent-list">
+                  <div class="empty-state">
+                    <span class="empty-state-icon" aria-hidden="true"><i class="material-icons cdx-mi" aria-hidden="true">mail</i></span>
+                    <p class="empty-state-message">Nenhuma atualização recente</p>
+                    <p class="empty-state-hint">Registre o primeiro aluno para começar</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="panel panel--accent" aria-labelledby="quick-actions-title">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Acesso Rápido</p>
+                  <h2 id="quick-actions-title">Ações Frequentes</h2>
+                </div>
+              </div>
+              <div class="panel-body">
+                <div class="quick-actions-grid">
+                  <button class="quick-action-card" type="button" data-open-aluno-form>
+                    <span class="quick-action-icon" aria-hidden="true"><i class="material-icons cdx-mi" aria-hidden="true">person</i></span>
+                    <span class="quick-action-label">Novo Aluno</span>
+                    <span class="quick-action-hint">Registrar estudante</span>
+                  </button>
+                  <button class="quick-action-card" type="button" data-view-target="alunos">
+                    <span class="quick-action-icon" aria-hidden="true"><i class="material-icons cdx-mi" aria-hidden="true">assignment</i></span>
+                    <span class="quick-action-label">Listar Alunos</span>
+                    <span class="quick-action-hint">Ver todos os registros</span>
+                  </button>
+                  <button class="quick-action-card" type="button" data-view-target="escolas">
+                    <span class="quick-action-icon" aria-hidden="true"><i class="material-icons cdx-mi" aria-hidden="true">account_balance</i></span>
+                    <span class="quick-action-label">Escolas</span>
+                    <span class="quick-action-hint">Gerenciar unidades</span>
+                  </button>
+                  <button class="quick-action-card" type="button" data-view-target="professores">
+                    <span class="quick-action-icon" aria-hidden="true"><i class="material-icons cdx-mi" aria-hidden="true">person</i>‍<i class="material-icons cdx-mi" aria-hidden="true">account_balance</i></span>
+                    <span class="quick-action-label">Professores</span>
+                    <span class="quick-action-hint">Gerenciar docentes</span>
+                  </button>
+                  <button class="quick-action-card" type="button" data-view-target="analises">
+                    <span class="quick-action-icon" aria-hidden="true"><i class="material-icons cdx-mi" aria-hidden="true">biotech</i></span>
+                    <span class="quick-action-label">Nova Análise</span>
+                    <span class="quick-action-hint">Executar NCA/SEM</span>
+                  </button>
+                  <button class="quick-action-card" type="button" data-view-target="analises">
+                    <span class="quick-action-icon" aria-hidden="true"><i class="material-icons cdx-mi" aria-hidden="true">bar_chart</i></span>
+                    <span class="quick-action-label">Diagnóstico NCA/SEM</span>
+                    <span class="quick-action-hint">Ver prontidão e resultados analíticos</span>
+                  </button>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section
+          id="view-alunos"
+          class="app-view"
+          aria-labelledby="alunos-title"
+          hidden
+        >
+          <?!= include('AlunoList'); ?>
+        </section>
+
+        <section
+          id="view-escolas"
+          class="app-view"
+          aria-labelledby="escolas-title"
+          hidden
+        >
+          <?!= include('EscolaList'); ?>
+        </section>
+
+        <section
+          id="view-professores"
+          class="app-view"
+          aria-labelledby="professores-title"
+          hidden
+        >
+          <?!= include('ProfessorList'); ?>
+        </section>
+
+        <?!= include('AnaliseRequest'); ?>
+        <?!= include('BackendMaturityHtml'); ?>
+        <?!= include('FrontendMaturityHtml'); ?>
+      </main>
+    </div>
+  </div>
+
+  <?!= include('AlunoForm'); ?>
+  <?!= include('EscolaForm'); ?>
+  <?!= include('ProfessorForm'); ?>
+  <?!= include('LoadingState'); ?>
+  <?!= include('ErrorPage'); ?>
+  <?!= include('SuccessModal'); ?>
+  <?!= include('Scripts'); ?>
+<script>
+(function() {
+  var STORAGE_KEY = 'codex.preferredTheme';
+
+  function applyTheme(theme) {
+    var next = theme === 'light' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    if (document.body) document.body.setAttribute('data-theme', next);
+    var btn = document.getElementById('codex-theme-toggle');
+    if (btn) {
+      var icon = btn.querySelector('.codex-theme-toggle__icon');
+      var label = btn.querySelector('.codex-theme-toggle__label');
+      if (icon) icon.textContent = next === 'light' ? '☀️' : '🌙';
+      if (label) label.textContent = next === 'light' ? 'Claro' : 'Escuro';
+      btn.setAttribute('aria-pressed', next === 'light' ? 'true' : 'false');
+      btn.setAttribute('title', next === 'light' ? 'Usar tema escuro' : 'Usar tema claro');
+    }
+  }
+
+  function preferredTheme() {
+    try {
+      return localStorage.getItem(STORAGE_KEY) || 'dark';
+    } catch (e) {
+      return 'dark';
+    }
+  }
+
+  function saveTheme(theme) {
+    try {
+      localStorage.setItem(STORAGE_KEY, theme);
+    } catch (e) {}
+  }
+
+  function integrateButton(btn) {
+    var target = document.querySelector('.header-actions, .topbar-actions, .navbar-actions, .nav-actions, header .actions, nav .actions, .app-header, .topbar, .navbar, header, nav');
+    if (target && !target.contains(btn)) {
+      target.appendChild(btn);
+      btn.classList.add('is-integrated');
+    }
+  }
+
+  function initThemeToggle() {
+    var btn = document.getElementById('codex-theme-toggle');
+    if (!btn) return;
+    applyTheme(preferredTheme());
+    integrateButton(btn);
+    btn.addEventListener('click', function() {
+      var current = document.documentElement.getAttribute('data-theme') || 'dark';
+      var next = current === 'light' ? 'dark' : 'light';
+      saveTheme(next);
+      applyTheme(next);
+      integrateButton(btn);
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initThemeToggle);
+  } else {
+    initThemeToggle();
+  }
+})();
+</script>
+
+<script>
+/* codex-school-community-ux-script: pequenos ajustes de contexto escolar */
+(function() {
+  if (window.__codexSchoolCommunityUx) return;
+  window.__codexSchoolCommunityUx = true;
+
+  function ready(fn) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn, { once: true });
+    else fn();
+  }
+
+  ready(function() {
+    document.documentElement.setAttribute('data-community-context', 'school');
+
+    document.querySelectorAll('form').forEach(function(form) {
+      if (!form.getAttribute('aria-label') && !form.getAttribute('aria-labelledby')) {
+        form.setAttribute('aria-label', 'Formulario da comunidade escolar');
+      }
+    });
+
+    document.querySelectorAll('input, select, textarea').forEach(function(field) {
+      if (!field.id && field.name) field.id = 'field-' + String(field.name).replace(/[^a-zA-Z0-9_-]/g, '-');
+      if (field.required && !field.getAttribute('aria-required')) field.setAttribute('aria-required', 'true');
+      if (!field.getAttribute('autocomplete')) {
+        var type = (field.getAttribute('type') || '').toLowerCase();
+        var name = (field.getAttribute('name') || field.id || '').toLowerCase();
+        if (type === 'email' || name.indexOf('email') >= 0) field.setAttribute('autocomplete', 'email');
+        else if (name.indexOf('nome') >= 0 || name.indexOf('name') >= 0) field.setAttribute('autocomplete', 'name');
+        else if (name.indexOf('senha') >= 0 || name.indexOf('password') >= 0) field.setAttribute('autocomplete', 'current-password');
+      }
+    });
+
+    document.querySelectorAll('button:not([type])').forEach(function(button) {
+      button.setAttribute('type', 'button');
+    });
+  });
+})();
+</script>
+
+<script>
+/* codex-project-behavior-standardization: microcomportamentos compartilhados */
+(function() {
+  if (window.__codexProjectBehaviorStandardization) return;
+  window.__codexProjectBehaviorStandardization = true;
+
+  var SUBMIT_LOCK_MS = 2500;
+  var invalidFocusPending = false;
+
+  function isElement(value) {
+    return value && value.nodeType === 1;
+  }
+
+  function prefersReducedMotion() {
+    return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  function unlockForm(form, button) {
+    if (isElement(form)) {
+      delete form.dataset.codexSubmitting;
+      if (form.getAttribute('aria-busy') === 'true') form.setAttribute('aria-busy', 'false');
+    }
+
+    if (isElement(button) && button.dataset.codexSubmitLocked === 'true') {
+      delete button.dataset.codexSubmitLocked;
+      button.disabled = false;
+      button.removeAttribute('aria-disabled');
+    }
+  }
+
+  function restoreSubmitLocks(scope) {
+    var root = scope && scope.querySelectorAll ? scope : document;
+
+    root.querySelectorAll('form[data-codex-submitting="true"]').forEach(function(form) {
+      unlockForm(form);
+    });
+
+    root.querySelectorAll('[data-codex-submit-locked="true"]').forEach(function(button) {
+      unlockForm(null, button);
+    });
+  }
+
+  document.addEventListener('submit', function(event) {
+    var form = event.target;
+    if (!isElement(form) || String(form.tagName).toLowerCase() !== 'form') return;
+    if (form.hasAttribute('data-no-submit-lock')) return;
+
+    if (form.dataset.codexSubmitting === 'true') {
+      event.preventDefault();
+      return;
+    }
+
+    if (typeof form.checkValidity === 'function' && !form.checkValidity()) return;
+
+    form.dataset.codexSubmitting = 'true';
+    form.setAttribute('aria-busy', 'true');
+
+    var button = event.submitter || form.querySelector('button[type="submit"], input[type="submit"], button:not([type])');
+    if (isElement(button) && !button.disabled && !button.hasAttribute('data-no-submit-lock')) {
+      button.dataset.codexSubmitLocked = 'true';
+      button.disabled = true;
+      button.setAttribute('aria-disabled', 'true');
+    }
+
+    window.setTimeout(function() {
+      unlockForm(form, button);
+    }, SUBMIT_LOCK_MS);
+  }, true);
+
+  document.addEventListener('invalid', function(event) {
+    var field = event.target;
+    if (!isElement(field) || invalidFocusPending) return;
+    invalidFocusPending = true;
+
+    window.setTimeout(function() {
+      invalidFocusPending = false;
+      if (!document.documentElement.contains(field)) return;
+      try {
+        field.scrollIntoView({ block: 'center', inline: 'nearest', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+        field.focus({ preventScroll: true });
+      } catch (error) {
+        field.focus();
+      }
+    }, 0);
+  }, true);
+
+  document.addEventListener('keydown', function(event) {
+    if (event.key !== 'Escape') return;
+    var closedSomething = false;
+
+    var dialogs = Array.prototype.slice.call(document.querySelectorAll('dialog[open]'));
+    var dialog = dialogs[dialogs.length - 1];
+    if (dialog && typeof dialog.close === 'function') {
+      dialog.close();
+      closedSomething = true;
+    }
+
+    if (!closedSomething) {
+      var details = Array.prototype.slice.call(document.querySelectorAll('details[open]'));
+      var detail = details[details.length - 1];
+      if (detail) {
+        detail.removeAttribute('open');
+        closedSomething = true;
+      }
+    }
+
+    document.querySelectorAll('[aria-expanded="true"]').forEach(function(toggle) {
+      toggle.setAttribute('aria-expanded', 'false');
+      closedSomething = true;
+    });
+
+    if (closedSomething) event.preventDefault();
+  }, true);
+
+  window.addEventListener('pageshow', function() {
+    restoreSubmitLocks(document);
+  });
+
+  document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible') restoreSubmitLocks(document);
+  });
+})();
+</script>
+
+<!-- CODEX_NOTEBOOK_GRAPH_GALLERY_V1 -->
+<section class="codex-notebook-graphs" data-codex-notebook-graphs aria-live="polite">
+  
+  <div class="codex-notebook-graphs__header">
+    <h2 class="codex-notebook-graphs__title">Gráficos da análise (notebook)</h2>
+    <p class="codex-notebook-graphs__status" data-codex-graphs-status>Carregando gráficos...</p>
+  </div>
+  <div class="codex-notebook-graphs__grid" data-codex-graphs-grid></div>
+</section>
+<script>
+(function () {
+  var section = document.currentScript && document.currentScript.previousElementSibling;
+  if (!section || !section.matches('[data-codex-notebook-graphs]')) return;
+  var status = section.querySelector('[data-codex-graphs-status]');
+  var grid = section.querySelector('[data-codex-graphs-grid]');
+
+  var META = {
+    '01_overview_abas': { t: 'Visão geral por aba', d: 'Volume de registros em cada aba da planilha.' },
+    '02_distribuicoes_numericas': { t: 'Distribuições numéricas', d: 'Dispersão das principais métricas (boxplot).' },
+    '03_top_categorias': { t: 'Top categorias', d: 'Categorias mais frequentes na aba principal.' },
+    '04_serie_temporal': { t: 'Série temporal', d: 'Evolução dos registros ao longo do tempo.' }
+  };
+  function meta(name) {
+    var key = String(name || '').toLowerCase().replace(/\.(png|jpe?g)$/, '');
+    if (META[key]) return META[key];
+    var pretty = key.replace(/^\d+[_-]?/, '').replace(/[_-]+/g, ' ').trim();
+    pretty = pretty ? pretty.charAt(0).toUpperCase() + pretty.slice(1) : 'Gráfico';
+    return { t: pretty, d: '' };
+  }
+  function setStatus(text) { if (status) status.textContent = text; }
+
+  var lightbox, lightImg;
+  function close() { if (lightbox) lightbox.classList.remove('is-open'); }
+  function openLightbox(src, alt) {
+    if (!lightbox) {
+      lightbox = document.createElement('div');
+      lightbox.className = 'codex-notebook-graphs__lightbox';
+      var btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'codex-notebook-graphs__close';
+      btn.setAttribute('aria-label', 'Fechar'); btn.textContent = '\u00d7';
+      lightImg = document.createElement('img');
+      lightbox.appendChild(btn); lightbox.appendChild(lightImg);
+      document.body.appendChild(lightbox);
+      lightbox.addEventListener('click', function (e) { if (e.target === lightbox || e.target === btn) close(); });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+    }
+    lightImg.src = src; lightImg.alt = alt || '';
+    lightbox.classList.add('is-open');
+  }
+
+  function render(response) {
+    var images = response && response.images ? response.images : [];
+    grid.innerHTML = '';
+    if (!images.length) {
+      grid.innerHTML = '<div class="codex-notebook-graphs__empty">' +
+        (response && response.message ? (response.message + ' ') : '') +
+        'Ainda não há gráficos. Rode <code>populateSyntheticData()</code> e depois o ' +
+        '<code>notebook.py</code> no Colab (com <code>SPREADSHEETS_ID</code> e <code>FOLDER_ID</code>).</div>';
+      setStatus('Nenhum gráfico ainda.');
+      return;
+    }
+    images.forEach(function (image) {
+      var info = meta(image.name);
+      var figure = document.createElement('figure');
+      figure.className = 'codex-notebook-graphs__figure';
+      var btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'codex-notebook-graphs__btn'; btn.title = 'Ampliar';
+      var img = document.createElement('img');
+      img.loading = 'lazy'; img.decoding = 'async'; img.src = image.dataUrl; img.alt = info.t;
+      btn.appendChild(img);
+      btn.addEventListener('click', function () { openLightbox(image.dataUrl, info.t); });
+      var cap = document.createElement('figcaption');
+      cap.className = 'codex-notebook-graphs__cap';
+      var ct = document.createElement('div');
+      ct.className = 'codex-notebook-graphs__cap-title'; ct.textContent = info.t;
+      cap.appendChild(ct);
+      if (info.d) {
+        var cd = document.createElement('div');
+        cd.className = 'codex-notebook-graphs__cap-desc'; cd.textContent = info.d;
+        cap.appendChild(cd);
+      }
+      figure.appendChild(btn); figure.appendChild(cap);
+      grid.appendChild(figure);
+    });
+    setStatus(images.length + ' gráfico(s).');
+  }
+
+  if (!window.google || !google.script || !google.script.run) {
+    setStatus('Disponível apenas no Web App publicado.');
+    grid.innerHTML = '<div class="codex-notebook-graphs__empty">Os gráficos aparecem quando esta tela roda dentro do Web App publicado.</div>';
+    return;
+  }
+  google.script.run
+    .withSuccessHandler(render)
+    .withFailureHandler(function (error) {
+      setStatus(error && error.message ? error.message : 'Não foi possível carregar os gráficos.');
+    })
+    .getNotebookGraphImages({});
+}());
+</script>
+<!-- /CODEX_NOTEBOOK_GRAPH_GALLERY_V1 -->
+<script>
+/* codex-apicall-v1 — não remover este marcador */
+(function() {
+  'use strict';
+  /* Lê ?page=app#tok= da URL e armazena em módulo para todas as chamadas */
+  var __tok__ = '';
+  try {
+    __tok__ = new URLSearchParams(window.location.hash.replace(/^#/, '')).get('tok') || new URLSearchParams(window.location.search).get('tok') || '';
+  } catch(e) {}
+  window.__CODEX_TOK__ = __tok__;
+
+  /* Funções que recebem tok como 1º argumento */
+  var TOK_FIRST = ['getInitialAppData', 'pingSession', 'getUserData',
+                   'getInitialData', 'getDashboardData', 'loadAppData'];
+
+  /**
+   * apiCall(fnName, ...args) — wrapper promisificado para google.script.run.
+   * Injeta o token automaticamente em funções da lista TOK_FIRST.
+   */
+  function apiCall(fnName) {
+    var extra = Array.prototype.slice.call(arguments, 1);
+    var args  = TOK_FIRST.indexOf(fnName) >= 0
+      ? [window.__CODEX_TOK__].concat(extra)
+      : extra;
+    return new Promise(function(resolve, reject) {
+      if (!window.google || !google.script || !google.script.run) {
+        reject(new Error('google.script.run não disponível.')); return;
+      }
+      var runner = google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(function(e) {
+          reject(new Error(e && e.message ? e.message : String(e)));
+        });
+      if (typeof runner[fnName] !== 'function') {
+        reject(new Error('Função backend não encontrada: ' + fnName)); return;
+      }
+      runner[fnName].apply(runner, args);
+    });
+  }
+
+  window.apiCall = apiCall;
+
+  /* Auto-bootstrap: chama getInitialAppData e dispara evento com o usuário */
+  document.addEventListener('DOMContentLoaded', function() {
+    if (typeof google === 'undefined' || !google.script) return;
+    apiCall('getInitialAppData').then(function(res) {
+      if (res && res.success && res.currentUser) {
+        window.__CODEX_USER__ = res.currentUser;
+        document.dispatchEvent(new CustomEvent('codex:userLoaded', { detail: res.currentUser }));
+      }
+    }).catch(function() { /* silencioso — getInitialAppData pode não existir ainda */ });
+  });
+})();
+</script>
+
+
+
+<!-- fleet-method-guide:start -->
+<style>
+  .fleet-method-guide { box-sizing: border-box; flex: 0 0 auto; grid-column: 1 / -1; width: calc(100% - 2rem); max-width: 64rem; margin: 1rem auto; border: 1px solid currentColor; border-radius: .65rem; color: inherit; background: inherit; font: inherit; }
+  .fleet-method-guide > summary { cursor: pointer; padding: .75rem 1rem; min-height: 44px; box-sizing: border-box; font-weight: 600; overflow-wrap: anywhere; }
+  .fleet-method-guide > summary:focus-visible { outline: 3px solid currentColor; outline-offset: 3px; }
+  .fleet-method-guide .fleet-method-content { padding: 0 1rem 1rem; max-height: 50vh; overflow-y: auto; overscroll-behavior: contain; }
+  .fleet-method-guide p { margin: .5rem 0; line-height: 1.5; overflow-wrap: anywhere; }
+  .fleet-method-guide dl { display: grid; grid-template-columns: minmax(0, 1fr); gap: .35rem; margin: .75rem 0 1rem; }
+  .fleet-method-guide dt { font-weight: 600; margin-top: .5rem; }
+  .fleet-method-guide dd { margin: 0; line-height: 1.5; overflow-wrap: anywhere; }
+  @media print { .fleet-method-guide { display: none; } }
+</style>
+<details class="fleet-method-guide" data-project="preferencial_nca_sem">
+  <summary>Como conduzir esta atividade</summary>
+  <div class="fleet-method-content">
+    <p>Preferencial — NCA-SEM</p>
+    <section aria-label="Para quem opera o projeto">
+      <p><strong>Para quem opera o projeto</strong></p>
+      <dl>
+        <dt>Propósito</dt><dd>Analisar condições necessárias e relações estruturais sem confundir associação com causalidade.</dd>
+        <dt>Ação</dt><dd>Validar dados, executar análise e revisar limitações do modelo.</dd>
+        <dt>Fechamento</dt><dd>Aprovar interpretação e próximos passos sob responsabilidade humana.</dd>
+      </dl>
+    </section>
+  </div>
+</details>
+<!-- fleet-method-guide:end -->
+</body>
+</html>
+
+
+
+
+
+
+
+
+

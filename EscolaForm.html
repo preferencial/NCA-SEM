@@ -1,0 +1,351 @@
+
+<script id="up-oracular-form-feedback">
+(function () {
+  'use strict';
+  if (window.UpOracularFeedback) return;
+
+  var timer = null;
+  function notify(kind, message) {
+    var box = document.getElementById('uo-feedback-box');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'uo-feedback-box';
+      box.className = 'uo-feedback-box';
+      box.setAttribute('role', 'status');
+      box.setAttribute('aria-live', 'polite');
+      document.body.appendChild(box);
+    }
+    box.dataset.kind = kind === 'err' ? 'err' : 'ok';
+    box.textContent = String(message || (kind === 'err' ? 'Nao foi possivel concluir.' : 'Operacao concluida.'));
+    box.classList.add('is-visible');
+    clearTimeout(timer);
+    timer = setTimeout(function () {
+      box.classList.remove('is-visible');
+    }, 1000);
+  }
+
+  function connectLabels(form) {
+    form.querySelectorAll('input:not([type="hidden"]), select, textarea').forEach(function (field, index) {
+      var id = field.id || ('uo-field-' + index + '-' + Math.random().toString(36).slice(2, 7));
+      field.id = id;
+      var label = form.querySelector('label[for="' + id + '"]');
+      if (!label) {
+        var sibling = field.previousElementSibling;
+        if (sibling && sibling.tagName === 'LABEL') {
+          sibling.htmlFor = id;
+          label = sibling;
+        }
+      }
+      if (label && field.parentElement && !field.parentElement.classList.contains('uo-field')) {
+        field.parentElement.classList.add('uo-field');
+      }
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('form').forEach(connectLabels);
+  });
+
+  document.addEventListener('submit', function (event) {
+    var form = event.target;
+    if (!form || form.tagName !== 'FORM') return;
+    form.setAttribute('aria-busy', 'true');
+    notify('ok', 'Enviando...');
+    window.setTimeout(function () {
+      if (form.getAttribute('aria-busy') === 'true') {
+        form.removeAttribute('aria-busy');
+      }
+    }, 10000);
+  }, true);
+
+  window.UpOracularFeedback = {
+    ok: function (message) { notify('ok', message); },
+    err: function (message) { notify('err', message); },
+    done: function (form, message) {
+      if (form) form.removeAttribute('aria-busy');
+      notify('ok', message);
+    },
+    fail: function (form, message) {
+      if (form) form.removeAttribute('aria-busy');
+      notify('err', message);
+    }
+  };
+}());
+</script>
+
+
+
+
+<dialog id="escola-dialog" class="dialog" aria-labelledby="escola-form-title">
+  <form id="escola-form" method="dialog" novalidate>
+    <div class="dialog-heading">
+      <div>
+        <p class="eyebrow">Rede educacional</p>
+        <h2 id="escola-form-title">Cadastrar escola</h2>
+      </div>
+      <button
+        class="icon-button dialog-close"
+        type="button"
+        aria-label="Fechar formulário de escola"
+        data-close-escola-form
+      >
+        <span aria-hidden="true">×</span>
+      </button>
+    </div>
+
+    <input id="escola-id" name="id" type="hidden">
+    <div id="escola-error-summary" class="form-error-summary" role="alert" hidden>
+      Revise os campos indicados.
+    </div>
+
+    <fieldset>
+      <legend>Identificação da unidade</legend>
+      <div class="form-grid form-grid-wide">
+        <label class="field field-span-2" for="escola-nome">
+          <span>Nome da escola <b aria-hidden="true">*</b></span>
+          <input inputmode="text" id="escola-nome" name="nome" type="text" maxlength="160" required autocomplete="name">
+          <small data-escola-field-error="nome"></small>
+        </label>
+        <label class="field" for="escola-inep">
+          <span>Código INEP</span>
+          <input inputmode="text" id="escola-inep" name="codigoInep" type="text" maxlength="30" autocomplete="name">
+          <small data-escola-field-error="codigoInep"></small>
+        </label>
+        <label class="field" for="escola-rede">
+          <span>Rede <b aria-hidden="true">*</b></span>
+          <select id="escola-rede" name="rede" required>
+            <option value="">Selecione</option>
+            <option value="municipal">Municipal</option>
+            <option value="estadual">Estadual</option>
+            <option value="federal">Federal</option>
+            <option value="privada">Privada</option>
+          </select>
+          <small data-escola-field-error="rede"></small>
+        </label>
+        <label class="field" for="escola-municipio">
+          <span>Município <b aria-hidden="true">*</b></span>
+          <input inputmode="text" id="escola-municipio" name="municipio" type="text" maxlength="120" required autocomplete="name">
+          <small data-escola-field-error="municipio"></small>
+        </label>
+        <label class="field" for="escola-uf">
+          <span>UF <b aria-hidden="true">*</b></span>
+          <input inputmode="text" id="escola-uf" name="uf" type="text" maxlength="2" required autocomplete="name">
+          <small data-escola-field-error="uf"></small>
+        </label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Estrutura e oferta</legend>
+      <div class="form-grid">
+        <label class="field field-span-2" for="escola-etapas">
+          <span>Etapas atendidas</span>
+          <input inputmode="text"
+            id="escola-etapas"
+            name="etapas"
+            type="text"
+            maxlength="180"
+            placeholder="Ex.: anos iniciais, anos finais e ensino médio"
+           autocomplete="name">
+          <small data-escola-field-error="etapas"></small>
+        </label>
+        <label class="field" for="escola-salas">
+          <span>Total de salas</span>
+          <input inputmode="decimal" id="escola-salas" name="totalSalas" type="number" min="0" max="10000">
+          <small data-escola-field-error="totalSalas"></small>
+        </label>
+        <label class="field" for="escola-internet">
+          <span>Conectividade</span>
+          <select id="escola-internet" name="temInternet">
+            <option value="false">Sem internet</option>
+            <option value="true">Com internet</option>
+          </select>
+          <small data-escola-field-error="temInternet"></small>
+        </label>
+        <label class="field" for="escola-status-form">
+          <span>Status</span>
+          <select id="escola-status-form" name="status">
+            <option value="ativo">Ativa</option>
+            <option value="inativo">Arquivada</option>
+          </select>
+          <small data-escola-field-error="status"></small>
+        </label>
+      </div>
+    </fieldset>
+
+    <div class="dialog-actions">
+      <button class="button button-quiet" type="button" data-close-escola-form>
+        Cancelar
+      </button>
+      <button id="escola-submit" class="button button-primary" type="submit">
+        Salvar escola
+      </button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+/* codex-school-community-ux-script: pequenos ajustes de contexto escolar */
+(function() {
+  if (window.__codexSchoolCommunityUx) return;
+  window.__codexSchoolCommunityUx = true;
+
+  function ready(fn) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn, { once: true });
+    else fn();
+  }
+
+  ready(function() {
+    document.documentElement.setAttribute('data-community-context', 'school');
+
+    document.querySelectorAll('form').forEach(function(form) {
+      if (!form.getAttribute('aria-label') && !form.getAttribute('aria-labelledby')) {
+        form.setAttribute('aria-label', 'Formulario da comunidade escolar');
+      }
+    });
+
+    document.querySelectorAll('input, select, textarea').forEach(function(field) {
+      if (!field.id && field.name) field.id = 'field-' + String(field.name).replace(/[^a-zA-Z0-9_-]/g, '-');
+      if (field.required && !field.getAttribute('aria-required')) field.setAttribute('aria-required', 'true');
+      if (!field.getAttribute('autocomplete')) {
+        var type = (field.getAttribute('type') || '').toLowerCase();
+        var name = (field.getAttribute('name') || field.id || '').toLowerCase();
+        if (type === 'email' || name.indexOf('email') >= 0) field.setAttribute('autocomplete', 'email');
+        else if (name.indexOf('nome') >= 0 || name.indexOf('name') >= 0) field.setAttribute('autocomplete', 'name');
+        else if (name.indexOf('senha') >= 0 || name.indexOf('password') >= 0) field.setAttribute('autocomplete', 'current-password');
+      }
+    });
+
+    document.querySelectorAll('button:not([type])').forEach(function(button) {
+      button.setAttribute('type', 'button');
+    });
+  });
+})();
+</script>
+
+<script>
+/* codex-project-behavior-standardization: microcomportamentos compartilhados */
+(function() {
+  if (window.__codexProjectBehaviorStandardization) return;
+  window.__codexProjectBehaviorStandardization = true;
+
+  var SUBMIT_LOCK_MS = 2500;
+  var invalidFocusPending = false;
+
+  function isElement(value) {
+    return value && value.nodeType === 1;
+  }
+
+  function prefersReducedMotion() {
+    return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  function unlockForm(form, button) {
+    if (isElement(form)) {
+      delete form.dataset.codexSubmitting;
+      if (form.getAttribute('aria-busy') === 'true') form.setAttribute('aria-busy', 'false');
+    }
+
+    if (isElement(button) && button.dataset.codexSubmitLocked === 'true') {
+      delete button.dataset.codexSubmitLocked;
+      button.disabled = false;
+      button.removeAttribute('aria-disabled');
+    }
+  }
+
+  function restoreSubmitLocks(scope) {
+    var root = scope && scope.querySelectorAll ? scope : document;
+
+    root.querySelectorAll('form[data-codex-submitting="true"]').forEach(function(form) {
+      unlockForm(form);
+    });
+
+    root.querySelectorAll('[data-codex-submit-locked="true"]').forEach(function(button) {
+      unlockForm(null, button);
+    });
+  }
+
+  document.addEventListener('submit', function(event) {
+    var form = event.target;
+    if (!isElement(form) || String(form.tagName).toLowerCase() !== 'form') return;
+    if (form.hasAttribute('data-no-submit-lock')) return;
+
+    if (form.dataset.codexSubmitting === 'true') {
+      event.preventDefault();
+      return;
+    }
+
+    if (typeof form.checkValidity === 'function' && !form.checkValidity()) return;
+
+    form.dataset.codexSubmitting = 'true';
+    form.setAttribute('aria-busy', 'true');
+
+    var button = event.submitter || form.querySelector('button[type="submit"], input[type="submit"], button:not([type])');
+    if (isElement(button) && !button.disabled && !button.hasAttribute('data-no-submit-lock')) {
+      button.dataset.codexSubmitLocked = 'true';
+      button.disabled = true;
+      button.setAttribute('aria-disabled', 'true');
+    }
+
+    window.setTimeout(function() {
+      unlockForm(form, button);
+    }, SUBMIT_LOCK_MS);
+  }, true);
+
+  document.addEventListener('invalid', function(event) {
+    var field = event.target;
+    if (!isElement(field) || invalidFocusPending) return;
+    invalidFocusPending = true;
+
+    window.setTimeout(function() {
+      invalidFocusPending = false;
+      if (!document.documentElement.contains(field)) return;
+      try {
+        field.scrollIntoView({ block: 'center', inline: 'nearest', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+        field.focus({ preventScroll: true });
+      } catch (error) {
+        field.focus();
+      }
+    }, 0);
+  }, true);
+
+  document.addEventListener('keydown', function(event) {
+    if (event.key !== 'Escape') return;
+    var closedSomething = false;
+
+    var dialogs = Array.prototype.slice.call(document.querySelectorAll('dialog[open]'));
+    var dialog = dialogs[dialogs.length - 1];
+    if (dialog && typeof dialog.close === 'function') {
+      dialog.close();
+      closedSomething = true;
+    }
+
+    if (!closedSomething) {
+      var details = Array.prototype.slice.call(document.querySelectorAll('details[open]'));
+      var detail = details[details.length - 1];
+      if (detail) {
+        detail.removeAttribute('open');
+        closedSomething = true;
+      }
+    }
+
+    document.querySelectorAll('[aria-expanded="true"]').forEach(function(toggle) {
+      toggle.setAttribute('aria-expanded', 'false');
+      closedSomething = true;
+    });
+
+    if (closedSomething) event.preventDefault();
+  }, true);
+
+  window.addEventListener('pageshow', function() {
+    restoreSubmitLocks(document);
+  });
+
+  document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible') restoreSubmitLocks(document);
+  });
+})();
+</script>
+
+
+
